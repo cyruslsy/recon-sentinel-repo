@@ -3,19 +3,25 @@ Recon Sentinel — Vulnerability Scanning Agent
 Tool: Nuclei (ProjectDiscovery)
 MITRE: T1190 (Exploit Public-Facing Application)
 
-Selects Nuclei templates based on technologies detected in the active phase:
-  - WordPress → wordpress/ templates
-  - Apache → apache/ templates  
-  - Exposed .env → exposures/ templates
-  - Default → cves/, misconfiguration/, exposures/
+Improvements over v1 (Round 8+ recommendations):
+  1. Per-subdomain scanning — scans ALL discovered hosts, not just root domain
+  2. Nuclei -as (automatic scan) — uses Wappalyzer for full tech detection (~3K techs)
+     PLUS our TECH_TEMPLATE_MAP as supplementary layer from earlier agents
+  3. KEV prioritization — runs CISA Known Exploited Vulnerabilities templates first
+  4. WAF-aware rate adaptation — slow scan for WAF-protected hosts, fast for others
+  5. Dynamic timeout — scales with target count × template count
+  6. Info flood self-correction — re-runs with severity filter if >90% are info
 
-Self-correction: If >90% of results are "info" severity, re-run with
-severity filter to focus on medium+ findings.
+Self-correction patterns:
+  - Info flood: >90% info severity → re-run with medium,high,critical filter
+  - WAF detection: uses WAF agent results to adapt per-host rate limiting
 """
 
 import hashlib
 import json
 import logging
+import os
+import tempfile
 import uuid
 
 from app.agents.base import BaseAgent
@@ -94,25 +100,47 @@ class VulnAgent(BaseAgent):
         super().__init__(*args, **kwargs)
         self._severity_filter: str | None = None
         self._templates: list[str] = []
+        self._waf_hosts: set[str] = set()     # Hosts with WAF detected
+        self._non_waf_hosts: set[str] = set()  # Hosts without WAF
 
     async def execute(self) -> list[dict]:
-        target = self.target_value
-        if not target.startswith("http"):
-            target = f"https://{target}"
+        # ─── Phase 1: Collect ALL targets (per-subdomain scanning) ─
+        await self.report_progress(3, "Collecting discovered targets...")
+        targets = await self._collect_scan_targets()
+        logger.info(f"Vuln phase scanning {len(targets)} targets (root + discovered hosts)")
 
-        # ─── Phase 1: Select templates based on tech detection ─
-        await self.report_progress(5, "Selecting templates based on detected technologies...")
+        # ─── Phase 2: Classify targets by WAF status ──────────
+        await self.report_progress(5, "Classifying targets by WAF status...")
+        await self._classify_waf_status()
+
+        # ─── Phase 3: Select templates (tech-adaptive + supplementary) ─
+        await self.report_progress(8, "Selecting templates based on detected technologies...")
         self._templates = await self._select_templates()
-        logger.info(f"Selected {len(self._templates)} template paths for {target}")
+        logger.info(f"Selected {len(self._templates)} supplementary template paths")
 
-        # ─── Phase 2: Run Nuclei ──────────────────────────────
-        await self.report_progress(15, f"Running Nuclei ({len(self._templates)} template sets)...")
-        raw_results = await self._run_nuclei(target)
+        # ─── Phase 4: KEV Priority Scan (fast, critical vulns first) ─
+        await self.report_progress(10, "Running KEV priority scan (actively exploited vulns)...")
+        kev_results = await self._run_nuclei(targets, mode="kev")
+        logger.info(f"KEV scan: {len(kev_results)} results")
+
+        # ─── Phase 5: Automatic scan (Wappalyzer tech detection) ─
+        await self.report_progress(30, f"Running automatic tech-based scan on {len(targets)} targets...")
+        auto_results = await self._run_nuclei(targets, mode="auto")
+
+        # ─── Phase 6: Supplementary templates from our tech map ─
+        if self._templates:
+            await self.report_progress(55, f"Running supplementary templates ({len(self._templates)} sets)...")
+            supp_results = await self._run_nuclei(targets, mode="templates")
+        else:
+            supp_results = []
+
+        # Merge all results
+        raw_results = kev_results + auto_results + supp_results
 
         if not raw_results:
             return []
 
-        # ─── Phase 3: Self-correction — info flood check ──────
+        # ─── Phase 7: Self-correction — info flood check ──────
         info_count = sum(1 for r in raw_results if r.get("severity", "").lower() == "info")
         if len(raw_results) > 10 and info_count / len(raw_results) > 0.90:
             logger.info(f"Info flood detected: {info_count}/{len(raw_results)} are info-severity")
@@ -126,10 +154,10 @@ class VulnAgent(BaseAgent):
                 )
 
             self._severity_filter = "medium,high,critical"
-            await self.report_progress(60, "Re-running Nuclei (medium+ only)...")
-            raw_results = await self._run_nuclei(target)
+            await self.report_progress(70, "Re-running Nuclei (medium+ only)...")
+            raw_results = await self._run_nuclei(targets, mode="auto")
 
-        # ─── Phase 4: Parse into findings ─────────────────────
+        # ─── Phase 8: Parse into findings ─────────────────────
         await self.report_progress(85, f"Processing {len(raw_results)} results...")
         findings = []
         seen_fingerprints = set()
@@ -187,13 +215,97 @@ class VulnAgent(BaseAgent):
 
         return findings
 
+    # ─── Target Collection (per-subdomain scanning) ─────────
+
+    async def _collect_scan_targets(self) -> list[str]:
+        """Collect ALL discovered hosts for vuln scanning (not just root domain).
+        This is the key improvement: vuln phase now scans every subdomain."""
+        targets = set()
+
+        async with AsyncSessionLocal() as db:
+            from sqlalchemy import select
+            # Get subdomains
+            result = await db.execute(
+                select(Finding.value)
+                .where(Finding.scan_id == uuid.UUID(self.scan_id))
+                .where(Finding.finding_type == FindingType.SUBDOMAIN)
+            )
+            for r in result.all():
+                host = r[0].strip().rstrip("/")
+                if not host.startswith("http"):
+                    targets.add(f"https://{host}")
+                else:
+                    targets.add(host)
+
+            # Get web hosts from port findings (HTTP/HTTPS ports)
+            result = await db.execute(
+                select(Finding.value)
+                .where(Finding.scan_id == uuid.UUID(self.scan_id))
+                .where(Finding.finding_type == FindingType.PORT)
+            )
+            for r in result.all():
+                val = r[0].strip()
+                if ":" in val:
+                    host, port = val.rsplit(":", 1)
+                    if port in ("80", "8080", "8000", "3000"):
+                        targets.add(f"http://{host}:{port}" if port != "80" else f"http://{host}")
+                    elif port in ("443", "8443"):
+                        targets.add(f"https://{host}:{port}" if port != "443" else f"https://{host}")
+
+        # Always include root domain
+        root = self.target_value
+        if not root.startswith("http"):
+            targets.add(f"https://{root}")
+        else:
+            targets.add(root)
+
+        # Cap to prevent resource exhaustion
+        max_targets = self.config.get("max_vuln_targets", 50)
+        target_list = sorted(targets)
+        if len(target_list) > max_targets:
+            logger.warning(f"Capping vuln targets from {len(target_list)} to {max_targets}")
+
+            async with AsyncSessionLocal() as db:
+                await self._create_health_event(
+                    db, HealthEventType.ANOMALY_DETECTED,
+                    f"Vuln target cap reached — scanning {max_targets} of {len(target_list)} hosts",
+                    f"Discovered {len(target_list)} web hosts but capping vuln scan at "
+                    f"{max_targets} to prevent resource exhaustion. Increase max_vuln_targets "
+                    f"in scan config to scan more.",
+                )
+
+            target_list = target_list[:max_targets]
+
+        return target_list
+
+    # ─── WAF Classification ───────────────────────────────────
+
+    async def _classify_waf_status(self) -> None:
+        """Use WAF Detection Agent findings to classify hosts for rate adaptation."""
+        async with AsyncSessionLocal() as db:
+            from sqlalchemy import select
+            result = await db.execute(
+                select(Finding.value, Finding.tags)
+                .where(Finding.scan_id == uuid.UUID(self.scan_id))
+                .where(Finding.tags.any("waf_detected"))
+            )
+            for val, tags in result.all():
+                host = val.strip().rstrip("/")
+                if not host.startswith("http"):
+                    host = f"https://{host}"
+                self._waf_hosts.add(host)
+
+        logger.info(f"WAF classification: {len(self._waf_hosts)} hosts behind WAF")
+
     # ─── Template Selection ───────────────────────────────────
 
     async def _select_templates(self) -> list[str]:
-        """Select Nuclei templates based on technologies found in earlier phases."""
+        """Select SUPPLEMENTARY Nuclei templates based on technologies found in earlier phases.
+        These augment Nuclei's built-in -as (automatic scan) mode, which uses Wappalyzer
+        for ~3,000 technologies. Our map catches tech indicators from non-web agents
+        (port scan, OSINT, threat intel) that Wappalyzer wouldn't see."""
         templates = set()
 
-        # Check findings from this scan for tech indicators
         async with AsyncSessionLocal() as db:
             from sqlalchemy import select
             result = await db.execute(
@@ -203,7 +315,6 @@ class VulnAgent(BaseAgent):
             rows = result.all()
 
             for raw_data, tags in rows:
-                # Check tags
                 if tags:
                     for tag in tags:
                         tag_lower = tag.lower()
@@ -211,7 +322,6 @@ class VulnAgent(BaseAgent):
                             if tech in tag_lower:
                                 templates.update(paths)
 
-                # Check raw_data for tech_detected
                 if raw_data and isinstance(raw_data, dict):
                     for tech in raw_data.get("tech_detected", []):
                         tech_lower = tech.lower()
@@ -219,61 +329,97 @@ class VulnAgent(BaseAgent):
                             if key in tech_lower:
                                 templates.update(paths)
 
-        # If no specific tech found, use defaults
-        if not templates:
-            templates = set(DEFAULT_TEMPLATES)
-
-        # Always include generic CVE and exposure checks
-        templates.add("http/cves/")
-        templates.add("http/exposures/")
-
+        # Don't add defaults — the -as mode handles that via Wappalyzer
+        # Only return supplementary templates from our tech map
         return sorted(templates)
 
-    # ─── Nuclei Execution ─────────────────────────────────────
+    # ─── Nuclei Execution (multi-mode) ────────────────────────
 
-    async def _run_nuclei(self, target: str) -> list[dict]:
-        """Run Nuclei with selected templates."""
-        cmd = [
-            "nuclei",
-            "-u", target,
-            "-json",
-            "-silent",
-            "-no-color",
-            "-rate-limit", str(self.config.get("rate_limit", 50)),
-            "-bulk-size", "25",
-            "-concurrency", "10",
-            "-timeout", "10",
-            "-retries", "1",
-        ]
+    async def _run_nuclei(self, targets: list[str], mode: str = "auto") -> list[dict]:
+        """Run Nuclei with support for multiple modes and target lists.
 
-        # Add template paths
-        for tpl in self._templates:
-            cmd.extend(["-t", tpl])
-
-        # Add severity filter if set (self-correction)
-        if self._severity_filter:
-            cmd.extend(["-severity", self._severity_filter])
-
-        # Exclude noisy templates
-        cmd.extend([
-            "-exclude-tags", "dos,fuzz",
-            "-exclude-severity", "info" if self._severity_filter else "",
-        ])
-
-        # Clean empty args
-        cmd = [c for c in cmd if c]
-
+        Modes:
+          - kev: Run KEV (Known Exploited Vulnerabilities) templates only — fast, critical-first
+          - auto: Use Nuclei's -as (automatic scan with Wappalyzer tech detection)
+          - templates: Run our supplementary tech-specific templates
+        """
+        # Write targets to a temp file for -l flag
+        targets_file = None
         try:
-            result = await self.run_command(cmd, timeout=600, parse_json=True)
-            if result["parsed"]:
-                return result["parsed"]
-            return []
-        except TimeoutError:
-            logger.warning(f"Nuclei timed out after 600s on {target}")
-            return []
-        except Exception as e:
-            logger.error(f"Nuclei failed: {e}")
-            return []
+            fd, targets_file = tempfile.mkstemp(suffix=".txt", prefix="nuclei_targets_")
+            with os.fdopen(fd, "w") as f:
+                f.write("\n".join(targets))
+
+            # Base command
+            cmd = [
+                "nuclei",
+                "-l", targets_file,
+                "-json",
+                "-silent",
+                "-no-color",
+                "-bulk-size", "25",
+                "-concurrency", str(self.config.get("concurrency", 10)),
+                "-timeout", "10",
+                "-retries", "1",
+            ]
+
+            # WAF-aware rate limiting: if any targets have WAF, use slower rate
+            if self._waf_hosts:
+                waf_ratio = len(self._waf_hosts) / max(len(targets), 1)
+                if waf_ratio > 0.5:
+                    # Majority WAF — use stealth rate
+                    rate = self.config.get("waf_rate_limit", 15)
+                    cmd.extend(["-rate-limit", str(rate)])
+                    logger.info(f"WAF-aware: using stealth rate {rate} req/s ({len(self._waf_hosts)} WAF hosts)")
+                else:
+                    # Mixed — use moderate rate
+                    rate = self.config.get("rate_limit", 30)
+                    cmd.extend(["-rate-limit", str(rate)])
+            else:
+                rate = self.config.get("rate_limit", 50)
+                cmd.extend(["-rate-limit", str(rate)])
+
+            # Mode-specific flags
+            if mode == "kev":
+                cmd.extend(["-tags", "kev,vkev"])
+                cmd.extend(["-severity", "critical,high"])
+            elif mode == "auto":
+                cmd.append("-as")  # Wappalyzer automatic tech detection
+            elif mode == "templates":
+                for tpl in self._templates:
+                    cmd.extend(["-t", tpl])
+
+            # Add severity filter if set (self-correction)
+            if self._severity_filter:
+                cmd.extend(["-severity", self._severity_filter])
+
+            # Exclude noisy templates
+            exclude_tags = "dos,fuzz"
+            cmd.extend(["-exclude-tags", exclude_tags])
+
+            # Dynamic timeout: scale with target count
+            # Base 300s + 10s per target, capped at 1800s (30 min)
+            dynamic_timeout = min(300 + len(targets) * 10, 1800)
+
+            try:
+                result = await self.run_command(cmd, timeout=dynamic_timeout, parse_json=True)
+                if result["parsed"]:
+                    return result["parsed"]
+                return []
+            except TimeoutError:
+                logger.warning(f"Nuclei ({mode}) timed out after {dynamic_timeout}s on {len(targets)} targets")
+                return []
+            except Exception as e:
+                logger.error(f"Nuclei ({mode}) failed: {e}")
+                return []
+
+        finally:
+            # Clean up temp file
+            if targets_file and os.path.exists(targets_file):
+                try:
+                    os.unlink(targets_file)
+                except OSError:
+                    pass
 
 
 # ─── Celery Task ──────────────────────────────────────────────

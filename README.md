@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white" />
   <img src="https://img.shields.io/badge/license-proprietary-red" />
   <img src="https://img.shields.io/badge/tests-91-green" />
-  <img src="https://img.shields.io/badge/agents-13-orange" />
+  <img src="https://img.shields.io/badge/agents-14-orange" />
   <img src="https://img.shields.io/badge/MITRE_ATT&CK-15_techniques-purple" />
   <img src="https://img.shields.io/badge/review_rounds-8_passed-brightgreen" />
 </p>
@@ -168,8 +168,9 @@ Phase 3: VULNERABILITY (2 agents)
 | 9 | Dir/File Discovery | Active | ffuf | T1190, T1078 | Custom 404, WAF, rate limit, redirect loop |
 | 10 | Cloud Asset Discovery | Active | DNS CNAME, HTTP | T1580, T1530 | — |
 | 11 | JavaScript Analysis | Active | httpx, regex | T1552, T1190 | — |
-| 12 | Vulnerability Scanner | Vuln | Nuclei | T1190 | Info flood → severity filter |
-| 13 | Subdomain Takeover | Vuln | DNS, HTTP | T1584 | — |
+| 12 | Vulnerability Scanner | Vuln | Nuclei | T1190 | Info flood → severity filter; WAF-aware rate adaptation; KEV priority scan |
+| 13 | Subdomain Takeover | Vuln | DNS, HTTP | T1584 | Truncation warning at 100+ hosts |
+| 14 | Bad Secrets | Vuln | badsecrets, httpx | T1078, T1190 | Known MachineKeys, Telerik keys, Flask/Rails/JWT weak secrets |
 
 ---
 
@@ -367,7 +368,7 @@ recon-sentinel-repo/
 | API endpoints | 91 REST + 2 WebSocket |
 | Database tables | 29 |
 | Frontend views | 12 |
-| Scanning agents | 13 |
+| Scanning agents | 14 |
 | MITRE ATT&CK techniques | 15 |
 | Self-correction patterns | 5 |
 | Notification channels | 5 (Slack, Discord, Telegram, webhook, email) |

@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 ALLOWED_AGENT_TYPES = frozenset({
     "subdomain", "osint", "email_sec", "threat_intel", "cred_leak",
     "port_scan", "web_recon", "ssl_tls", "dir_file", "cloud",
-    "js_analysis", "vuln", "subdomain_takeover", "wayback", "waf",
-    "github_dork",
+    "js_analysis", "vuln", "subdomain_takeover", "badsecrets",
+    "wayback", "waf", "github_dork",
 })
 
 
@@ -297,6 +297,7 @@ class ScanOrchestrator:
         agents = [
             "app.agents.vuln.run_vuln_agent",
             "app.agents.subdomain_takeover.run_subdomain_takeover_agent",
+            "app.agents.badsecrets.run_badsecrets_agent",
         ]
 
         # Apply re-plan modifications (may have added/skipped agents)

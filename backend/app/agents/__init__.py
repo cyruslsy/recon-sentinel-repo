@@ -1,6 +1,6 @@
 """
 Recon Sentinel — Agent Package
-9 agents implemented (Week 2 + Week 5), 5 remaining for post-MVP
+14 agents implemented across 3 phases
 """
 
 # Week 2 agents
@@ -23,6 +23,9 @@ from app.agents.vuln import VulnAgent, run_vuln_agent  # noqa: F401
 from app.agents.cloud import CloudAssetAgent, run_cloud_agent  # noqa: F401
 from app.agents.js_analysis import JSAnalysisAgent, run_js_analysis_agent  # noqa: F401
 from app.agents.subdomain_takeover import SubdomainTakeoverAgent, run_subdomain_takeover_agent  # noqa: F401
+
+# Known-secret detection (inspired by BBOT's badsecrets module)
+from app.agents.badsecrets import BadSecretsAgent, run_badsecrets_agent  # noqa: F401
 
 # Self-correction patterns
 from app.agents.corrections import detect_anomalies  # noqa: F401

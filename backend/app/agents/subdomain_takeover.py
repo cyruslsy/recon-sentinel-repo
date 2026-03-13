@@ -171,7 +171,20 @@ class SubdomainTakeoverAgent(BaseAgent):
         await self.report_progress(10, f"Checking {len(subdomains)} subdomains for takeover...")
 
         # ─── Phase 2: Check each subdomain ────────────────────
-        for i, sub in enumerate(subdomains[:100]):  # Cap at 100
+        max_check = 100
+        if len(subdomains) > max_check:
+            logger.warning(f"Subdomain takeover: capping from {len(subdomains)} to {max_check}")
+            async with AsyncSessionLocal() as db:
+                await self._create_health_event(
+                    db, HealthEventType.ANOMALY_DETECTED,
+                    f"Subdomain takeover cap — checking {max_check} of {len(subdomains)} hosts",
+                    f"Discovered {len(subdomains)} subdomains but capping takeover check at "
+                    f"{max_check} to prevent excessive DNS/HTTP probing. "
+                    f"{len(subdomains) - max_check} subdomains were skipped.",
+                )
+
+        check_list = subdomains[:max_check]
+        for i, sub in enumerate(check_list):
             # Clean up subdomain (remove protocol if present)
             clean_sub = sub.replace("https://", "").replace("http://", "").rstrip("/")
 
@@ -181,8 +194,8 @@ class SubdomainTakeoverAgent(BaseAgent):
 
             if i % 10 == 0:
                 await self.report_progress(
-                    10 + int(80 * i / max(len(subdomains[:100]), 1)),
-                    f"Checked {i+1}/{len(subdomains[:100])} — {len(findings)} takeover candidates",
+                    10 + int(80 * i / max(len(check_list), 1)),
+                    f"Checked {i+1}/{len(check_list)} — {len(findings)} takeover candidates",
                 )
 
         return findings
