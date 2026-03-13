@@ -59,6 +59,16 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,     # Re-queue on worker death
     task_track_started=True,             # Track running state
 
+    # Broker connection resilience
+    broker_connection_retry_on_startup=True,
+    broker_connection_retry=True,
+    broker_connection_max_retries=10,
+    broker_transport_options={
+        "visibility_timeout": 3600,      # 1 hour — long-running agent tasks
+        "socket_timeout": 10,
+        "socket_connect_timeout": 10,
+    },
+
     # Result expiry
     result_expires=3600,                 # 1 hour
 

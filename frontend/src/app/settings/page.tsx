@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+  const [loading, setLoading] = useState(true);
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
 import type { ApiKeyConfig, LlmUsageSummary } from "@/lib/types";
@@ -17,6 +18,7 @@ export default function SettingsPage() {
     try {
       if (tab === "api-keys") setApiKeys(await api.listApiKeys());
       if (tab === "llm") setLlmUsage(await api.llmUsage());
+    setLoading(false);
     } catch {}
   }
 
@@ -40,6 +42,7 @@ export default function SettingsPage() {
   const totalCost = llmUsage.reduce((sum, u) => sum + (u.cost_usd || 0), 0);
 
   return (
+
     <AppLayout>
       <div className="max-w-5xl mx-auto">
         <h1 className="text-xl font-semibold mb-6">Settings</h1>
@@ -47,7 +50,7 @@ export default function SettingsPage() {
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-sentinel-surface rounded-lg p-1 w-fit">
           {([["api-keys", "API Keys"], ["llm", "LLM Usage"]] as const).map(([key, label]) => (
-            <button key={key} onClick={() => setTab(key as any)}
+            <button key={key} onClick={() => setTab(key as "api-keys" | "llm")}
               className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${tab === key ? "bg-sentinel-card text-sentinel-text" : "text-sentinel-muted"}`}>
               {label}
             </button>
@@ -56,7 +59,7 @@ export default function SettingsPage() {
 
         {tab === "api-keys" && (
           <>
-            <form onSubmit={addKey} className="flex gap-3 mb-6">
+            <form onSubmit={addKey} aria-label="Add API key" className="flex gap-3 mb-6">
               <select value={newKey.service_name} onChange={(e) => setNewKey((n) => ({ ...n, service_name: e.target.value }))}
                 className="bg-sentinel-bg border border-sentinel-border rounded px-3 py-1.5 text-sm">
                 <option value="">Select service...</option>

@@ -8,8 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
+from app.core.authorization import authorize_scan
 from app.models.models import User, CredentialLeak
 from app.schemas.schemas import CredentialLeakResponse, CredentialLeakSummary
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -20,8 +24,10 @@ async def list_credentials(
     has_password: bool | None = None,
     has_plaintext: bool | None = None,
     limit: int = Query(50, le=500),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    await authorize_scan(scan_id, user, db)
     q = select(CredentialLeak).where(CredentialLeak.scan_id == scan_id)
     if has_password is not None:
         q = q.where(CredentialLeak.has_password == has_password)
@@ -34,6 +40,7 @@ async def list_credentials(
 
 @router.get("/summary", response_model=CredentialLeakSummary)
 async def credential_summary(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await authorize_scan(scan_id, user, db)
     base = select(func.count()).select_from(CredentialLeak).where(CredentialLeak.scan_id == scan_id)
     total = (await db.execute(base)).scalar() or 0
     with_pw = (await db.execute(base.where(CredentialLeak.has_password == True))).scalar() or 0  # noqa
@@ -47,5 +54,15 @@ async def get_credential(cred_id: UUID, user: User = Depends(get_current_user), 
     cred = await db.get(CredentialLeak, cred_id)
     if not cred:
         raise HTTPException(status_code=404, detail="Credential not found")
-    # TODO: Log to audit_log that user viewed credential data
+    # Log sensitive data access to audit trail
+    from app.models.models import AuditLog
+    audit = AuditLog(
+        user_id=user.id,
+        action="credential_view",
+        resource_type="credential_leak",
+        resource_id=cred_id,
+        detail=f"User {user.email} viewed credential {cred_id}",
+    )
+    db.add(audit)
+    await db.commit()
     return cred

@@ -33,7 +33,7 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-2 overflow-y-auto">
+      <nav aria-label="Main navigation" className="flex-1 py-2 overflow-y-auto">
         {NAV_ITEMS.map((item) => {
           const active = pathname?.startsWith(item.href);
           return (

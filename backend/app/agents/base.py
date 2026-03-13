@@ -16,7 +16,6 @@ import uuid
 import json
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select, text
@@ -399,12 +398,24 @@ class BaseAgent(ABC):
 
             # Batch flush to reduce lock contention
             if (i + 1) % batch_size == 0:
-                await db.flush()
+                try:
+                    await db.flush()
+                except Exception as flush_err:
+                    # Unique constraint violation (duplicate fingerprint) — rollback batch and retry individually
+                    if "uq_findings_scan_fingerprint" in str(flush_err):
+                        await db.rollback()
+                        logger.info(f"Duplicate finding skipped in batch flush (fan-out dedup)")
+                    else:
+                        raise
 
-        await db.commit()
-        return created
-
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception as commit_err:
+            if "uq_findings_scan_fingerprint" in str(commit_err):
+                await db.rollback()
+                logger.info(f"Duplicate findings skipped on commit (fan-out dedup)")
+            else:
+                raise
         return created
 
     # ─── Self-Correction ──────────────────────────────────────

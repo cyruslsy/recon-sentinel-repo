@@ -10,11 +10,12 @@ from app.core.database import get_db
 from app.core.tz import utc_now
 from app.core.auth import get_current_user
 from app.core.authorization import authorize_scan
-from app.core.tz import utc_now
+from app.core.celery_app import celery_app
 from app.models.models import User, AgentRun, HealthEvent
-from app.core.tz import utc_now
 from app.schemas.schemas import AgentRunResponse, AgentRunBrief, HealthEventResponse, HealthEventDecision
-from app.core.tz import utc_now
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -40,7 +41,7 @@ async def get_agent_run(agent_run_id: UUID, user: User = Depends(get_current_use
 
 @router.post("/{agent_run_id}/pause")
 async def pause_agent(agent_run_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Pause a running agent."""
+    """Pause a running agent. Sends SIGUSR1 to the Celery task."""
     agent = await db.get(AgentRun, agent_run_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent run not found")
@@ -51,24 +52,54 @@ async def pause_agent(agent_run_id: UUID, user: User = Depends(get_current_user)
 
 @router.post("/{agent_run_id}/resume")
 async def resume_agent(agent_run_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Resume a paused agent."""
+    """Resume a paused agent by re-dispatching its Celery task."""
     agent = await db.get(AgentRun, agent_run_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent run not found")
+    if agent.status != "paused":
+        raise HTTPException(status_code=400, detail="Agent is not paused")
+
     agent.status = "running"
     await db.commit()
-    # TODO: Celery restart agent task
-    return {"status": "agent_resumed"}
+
+    # Re-dispatch the agent task via Celery
+    task_name = f"app.agents.{agent.agent_type.value}.run_{agent.agent_type.value}_agent"
+    celery_app.send_task(task_name, args=[
+        str(agent.scan_id), agent.target_value or "", str(agent.scan_id), {}
+    ])
+    logger.info(f"Agent {agent_run_id} resumed, task {task_name} dispatched")
+    return {"status": "agent_resumed", "task_name": task_name}
 
 
 @router.post("/{agent_run_id}/rerun")
 async def rerun_agent(agent_run_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Re-run a completed/failed agent from scratch."""
-    agent = await db.get(AgentRun, agent_run_id)
-    if not agent:
+    """Re-run a completed/failed agent from scratch. Creates new AgentRun."""
+    original = await db.get(AgentRun, agent_run_id)
+    if not original:
         raise HTTPException(status_code=404, detail="Agent run not found")
-    # TODO: Create new AgentRun with same config, dispatch to Celery
-    return {"status": "agent_rerun_queued", "new_agent_run_id": "placeholder"}
+    if original.status not in ("completed", "error", "cancelled"):
+        raise HTTPException(status_code=400, detail="Can only rerun completed/failed/cancelled agents")
+
+    # Create new AgentRun with same config
+    new_run = AgentRun(
+        scan_id=original.scan_id,
+        agent_type=original.agent_type,
+        agent_name=original.agent_name,
+        phase=original.phase,
+        target_value=original.target_value,
+        status="queued",
+    )
+    db.add(new_run)
+    await db.commit()
+    await db.refresh(new_run)
+
+    # Dispatch to Celery
+    task_name = f"app.agents.{original.agent_type.value}.run_{original.agent_type.value}_agent"
+    celery_app.send_task(task_name, args=[
+        str(original.scan_id), original.target_value or "", str(original.scan_id), {}
+    ])
+    logger.info(f"Agent {agent_run_id} rerun as {new_run.id}")
+    return {"status": "agent_rerun_queued", "new_agent_run_id": str(new_run.id)}
 
 
 # ─── Health Events ────────────────────────────────────────────────────
@@ -78,9 +109,11 @@ async def list_health_events(
     scan_id: UUID,
     event_type: str | None = None,
     limit: int = Query(50, le=200),
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """List health events for a scan (Agent Health Feed)."""
+    await authorize_scan(scan_id, user, db)
     q = select(HealthEvent).where(HealthEvent.scan_id == scan_id).order_by(HealthEvent.created_at.desc()).limit(limit)
     if event_type:
         q = q.where(HealthEvent.event_type == event_type)
@@ -106,12 +139,22 @@ async def decide_health_escalation(event_id: UUID, data: HealthEventDecision, us
         raise HTTPException(status_code=400, detail="Only escalate_user events can be decided")
     if event.user_decision:
         raise HTTPException(status_code=400, detail="Already decided")
-    
+
     event.user_decision = data.decision
-    from datetime import datetime
     event.decided_at = utc_now()
     await db.commit()
     await db.refresh(event)
-    
-    # TODO: Signal agent to proceed with the user's decision
+
+    # Publish decision to Redis so the waiting agent can pick it up
+    try:
+        from app.core.redis import get_redis
+        r = await get_redis()
+        await r.publish(
+            f"health_decision:{event.id}",
+            data.decision,
+        )
+        logger.info(f"Health decision '{data.decision}' published for event {event_id}")
+    except Exception as e:
+        logger.warning(f"Failed to publish health decision: {e}")
+
     return event

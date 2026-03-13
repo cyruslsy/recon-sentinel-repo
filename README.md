@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/typescript-5.0+-blue?logo=typescript&logoColor=white" />
   <img src="https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white" />
   <img src="https://img.shields.io/badge/license-proprietary-red" />
-  <img src="https://img.shields.io/badge/tests-76-green" />
+  <img src="https://img.shields.io/badge/tests-78-green" />
   <img src="https://img.shields.io/badge/agents-13-orange" />
   <img src="https://img.shields.io/badge/MITRE_ATT&CK-15_techniques-purple" />
 </p>
@@ -179,8 +179,10 @@ Agents automatically detect and fix common failure scenarios during execution. W
 | **Secrets** | Docker secrets (never env vars). JWT key, DB password, API keys read from mounted files |
 | **Containers** | `cap_drop: ALL`, `cap_add: NET_RAW`, `read_only: true`, `no-new-privileges`, non-root user (UID 1000) |
 | **Network** | Production Nginx: X-Frame-Options DENY, HSTS, CSP, nosniff, rate limiting (auth: 5/min, API: 30/s) |
-| **SSRF** | Notification webhooks validated — blocks private IPs, localhost, link-local, cloud metadata, .internal/.local |
+| **SSRF** | Notification webhooks validated — blocks private IPs, localhost, link-local, cloud metadata, .internal/.local. DNS rebinding protection (resolve→check). IPv6 private ranges. |
+| **Encryption** | API keys encrypted at rest (Fernet). SMTP passwords encrypted in notification config. JWT secret-derived key. |
 | **WebSocket** | Token validated via `?token=` query param, 4001 close on invalid |
+| **Database** | Row-level security on scans, findings, agent_runs, reports, credential_leaks. RLS context auto-set via middleware. |
 
 ---
 
@@ -257,7 +259,7 @@ pip install -r requirements.txt
 cd ..
 python -m pytest tests/ -v
 
-# 76 tests across 10 suites:
+# 78 tests across 11 suites:
 #   test_auth.py           — register, login, JWT, protected routes
 #   test_scan_lifecycle.py — org → project → target → scan launch
 #   test_scope.py          — scope CRUD, auth enforcement
@@ -326,7 +328,7 @@ recon-sentinel-repo/
 │       ├── components/               Sidebar, AppLayout, ErrorBoundary
 │       ├── hooks/                    WebSocket hook
 │       └── lib/                      Typed API client, auth context, types.ts
-├── tests/                            76 tests across 10 suites
+├── tests/                            78 tests across 11 suites
 ├── docs/                             Architecture docs, competitive analysis
 │   └── assets/                       SVG diagrams
 ├── nginx/                            Dev + production configs
@@ -341,10 +343,10 @@ recon-sentinel-repo/
 
 | Metric | Value |
 |--------|-------|
-| Total code lines | 13,144 |
-| Python lines | 10,400+ |
-| TypeScript lines | 2,600+ |
-| Files | 119 |
+| Total code lines | 14,289 |
+| Python lines | 11,400+ |
+| TypeScript lines | 2,500+ |
+| Files | 128 |
 | API endpoints | 88+ REST + 2 WebSocket |
 | Database tables | 29 |
 | Frontend views | 12 |
@@ -352,8 +354,8 @@ recon-sentinel-repo/
 | MITRE ATT&CK techniques | 15 |
 | Self-correction patterns | 5 |
 | Notification channels | 5 (Slack, Discord, Telegram, webhook, email) |
-| Tests | 76 |
-| Code reviews | 8 rounds, 38 issues fixed |
+| Tests | 78 |
+| Code reviews | 11 rounds, 52 issues fixed |
 
 ---
 
@@ -369,12 +371,27 @@ recon-sentinel-repo/
 - [x] Real-time notifications (Slack/Discord/Telegram/webhook)
 - [x] Resume-from-checkpoint for crashed/paused scans
 - [x] SSRF protection on notification webhooks
-- [x] 76 tests including agent integration tests
+- [x] Row-level security (RLS) on 5 tables with middleware auto-context
+- [x] DNS rebinding protection in SSRF validation
+- [x] HackerOne + Bugcrowd scope import (GraphQL + REST)
+- [x] Email notifications via aiosmtplib (SMTP/TLS)
+- [x] Real LLM streaming via WebSocket (litellm stream=True)
+- [x] API key encryption at rest (Fernet)
+- [x] SMTP password encryption in notification config
+- [x] Celery task revocation on scan stop
+- [x] Agent resume + rerun endpoints
+- [x] Target context enrichment (DNS/MX/NS)
+- [x] Celery Flower monitoring dashboard
+- [x] Global scan timeout (6h) + findings cap (10K)
+- [x] Process group management for subprocess cleanup
+- [x] WAF evasion utilities (UA rotation, jitter, stealth headers)
+- [x] Zero TODOs — all feature stubs implemented
+- [x] 78 tests including agent integration + E2E tests
 
 **Planned:**
 - [ ] WAF detection agent
 - [ ] Historical data agent (Wayback Machine)
-- [ ] Row-level security (RLS) policies
+- [x] Row-level security (RLS) — 5 tables, middleware-wired
 - [ ] Plugin sandbox system
 - [ ] iptables-level scope enforcement
 - [ ] PDF/DOCX report export

@@ -11,9 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
+from app.core.authorization import authorize_scan
 from app.core.llm import llm_call, LLMUnavailableError
 from app.models.models import User, ChatSession, ChatMessage, Scan, Finding, Target
 from app.schemas.schemas import ChatMessageCreate, ChatMessageResponse, ChatSessionResponse
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -24,6 +28,7 @@ router = APIRouter()
 async def list_sessions(scan_id: UUID | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     q = select(ChatSession).order_by(ChatSession.created_at.desc())
     if scan_id:
+        await authorize_scan(scan_id, user, db)
         q = q.where(ChatSession.scan_id == scan_id)
     result = await db.execute(q)
     sessions = result.scalars().all()
@@ -181,5 +186,6 @@ async def send_message(session_id: UUID, data: ChatMessageCreate, user: User = D
     db.add(ai_msg)
     await db.commit()
     await db.refresh(ai_msg)
+    logger.info(f"Chat response generated in session {session_id}")
 
     return ai_msg

@@ -36,7 +36,7 @@ export default function LoginPage() {
           <p className="text-sentinel-muted text-sm mt-1">Sign in to your account</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-sentinel-surface border border-sentinel-border rounded-lg p-6 space-y-4">
+        <form onSubmit={handleSubmit} aria-label="Login form" className="bg-sentinel-surface border border-sentinel-border rounded-lg p-6 space-y-4">
           {error && (
             <div className="bg-sentinel-red/10 border border-sentinel-red/20 text-sentinel-red text-sm p-3 rounded">
               {error}

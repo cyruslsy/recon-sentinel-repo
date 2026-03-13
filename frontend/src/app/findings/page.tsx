@@ -78,7 +78,7 @@ export default function FindingsPage() {
         <div className="flex items-center gap-3 mb-4">
           <input
             type="text"
-            placeholder="Search findings..."
+            aria-label="Search findings" placeholder="Search findings..."
             value={filter.search}
             onChange={(e) => setFilter((f) => ({ ...f, search: e.target.value }))}
             className="bg-sentinel-bg border border-sentinel-border rounded px-3 py-1.5 text-sm w-64 focus:outline-none focus:border-sentinel-accent"

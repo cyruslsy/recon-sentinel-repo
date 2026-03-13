@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+  const [loading, setLoading] = useState(true);
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
 import type { Report, Scan } from "@/lib/types";
@@ -18,6 +19,7 @@ export default function ReportsPage() {
     try {
       setReports(await api.listReports());
       setScans(await api.listScans("limit=20"));
+    setLoading(false);
     } catch {}
   }
 
@@ -33,6 +35,7 @@ export default function ReportsPage() {
   }
 
   return (
+
     <AppLayout>
       <div className="max-w-5xl mx-auto">
         <h1 className="text-xl font-semibold mb-6">Reports</h1>

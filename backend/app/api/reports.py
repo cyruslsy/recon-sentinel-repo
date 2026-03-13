@@ -13,6 +13,9 @@ from app.core.authorization import authorize_scan
 from app.models.models import User, Report
 from app.schemas.schemas import ReportCreate, ReportResponse
 
+import logging
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -40,6 +43,7 @@ async def generate_report(data: ReportCreate, user: User = Depends(get_current_u
     # Dispatch LLM-powered report generation
     from app.tasks.reports import generate_report as gen_task
     gen_task.delay(str(report.id))
+    logger.info(f"Report generation queued for scan {data.scan_id}")
 
     return report
 

@@ -7,7 +7,6 @@ Outputs JSON report data (PDF/DOCX rendering is a future enhancement).
 import uuid
 import json
 import logging
-from datetime import datetime
 
 from sqlalchemy import select, func
 

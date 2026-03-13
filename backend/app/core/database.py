@@ -55,9 +55,11 @@ _settings = get_settings()
 engine = create_async_engine(
     _settings.DATABASE_URL,
     echo=False,
-    pool_size=20,
-    max_overflow=10,
+    pool_size=40,          # Support 10+ concurrent scans
+    max_overflow=20,       # Burst capacity
     pool_pre_ping=True,
+    pool_timeout=30,       # Seconds to wait for a connection before error
+    pool_recycle=1800,     # Recycle connections every 30 min (prevent stale)
 )
 
 AsyncSessionLocal = async_sessionmaker(

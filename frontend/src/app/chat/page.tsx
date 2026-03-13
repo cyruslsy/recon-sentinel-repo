@@ -107,7 +107,7 @@ export default function ChatPage() {
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about findings, MITRE techniques, or type /slash commands..."
+            aria-label="Chat message input" placeholder="Ask about findings, MITRE techniques, or type /slash commands..."
             className="flex-1 bg-sentinel-surface border border-sentinel-border rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-sentinel-accent"
             disabled={sending}
           />

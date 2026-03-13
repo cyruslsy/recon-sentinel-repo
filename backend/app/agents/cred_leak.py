@@ -12,7 +12,6 @@ import httpx
 
 from app.agents.base import BaseAgent
 from app.core.celery_app import celery_app
-from app.core.config import get_settings
 from app.models.enums import FindingSeverity, FindingType, ScanPhase
 
 logger = logging.getLogger(__name__)

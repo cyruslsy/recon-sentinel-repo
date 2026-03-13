@@ -8,8 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
+from app.core.authorization import authorize_scan
 from app.models.models import User, MitreTechnique, MitreFindingCount
 from app.schemas.schemas import MitreTechniqueResponse, MitreHeatmapItem, MitreHeatmapResponse
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -35,6 +39,7 @@ async def get_technique(technique_id: str, user: User = Depends(get_current_user
 
 @router.get("/heatmap/{scan_id}", response_model=MitreHeatmapResponse)
 async def get_heatmap(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await authorize_scan(scan_id, user, db)
     """Get MITRE ATT&CK heatmap data for a scan (from trigger-maintained counts)."""
     result = await db.execute(
         select(MitreFindingCount).where(MitreFindingCount.scan_id == scan_id).order_by(MitreFindingCount.technique_id)

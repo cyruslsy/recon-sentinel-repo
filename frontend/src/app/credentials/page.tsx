@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+  const [loading, setLoading] = useState(true);
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
@@ -18,10 +19,12 @@ export default function CredentialsPage() {
     try {
       setCreds(await api.listCredentials(scanId));
       setSummary(await api.credentialSummary(scanId));
+    setLoading(false);
     } catch {}
   }
 
   return (
+
     <AppLayout>
       <div className="max-w-6xl mx-auto">
         <h1 className="text-xl font-semibold mb-6">Credential Leaks</h1>

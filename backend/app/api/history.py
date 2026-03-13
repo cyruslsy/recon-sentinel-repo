@@ -12,12 +12,16 @@ from app.core.authorization import authorize_scan
 from app.models.models import User, ScanDiff, ScanDiffItem
 from app.schemas.schemas import ScanDiffResponse, ScanDiffItemResponse
 
+import logging
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
 @router.get("/diff/{scan_id}", response_model=ScanDiffResponse | None)
 async def get_latest_diff(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get the diff between this scan and the most recent previous scan."""
+    await authorize_scan(scan_id, user, db)
     result = await db.execute(
         select(ScanDiff).where(ScanDiff.scan_id == scan_id).order_by(ScanDiff.computed_at.desc()).limit(1)
     )
@@ -27,6 +31,8 @@ async def get_latest_diff(scan_id: UUID, user: User = Depends(get_current_user),
 @router.get("/diff/{scan_id}/vs/{prev_scan_id}", response_model=ScanDiffResponse)
 async def get_specific_diff(scan_id: UUID, prev_scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get diff between two specific scans."""
+    await authorize_scan(scan_id, user, db)
+    await authorize_scan(prev_scan_id, user, db)
     result = await db.execute(
         select(ScanDiff).where(ScanDiff.scan_id == scan_id, ScanDiff.prev_scan_id == prev_scan_id)
     )

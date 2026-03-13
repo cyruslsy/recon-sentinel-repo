@@ -100,3 +100,57 @@ async def _recover_stuck_scans():
         await db.commit()
         logger.warning(f"Recovered {len(stuck_ids)} stuck scans")
         return {"recovered": len(stuck_ids)}
+
+
+@celery_app.task(name="app.tasks.maintenance.enrich_target_context")
+def enrich_target_context(target_id: str, target_value: str):
+    """Resolve DNS + basic WHOIS for a target. Updates target.context_data JSONB."""
+    import asyncio
+    return asyncio.run(_enrich_target(target_id, target_value))
+
+
+async def _enrich_target(target_id: str, target_value: str):
+    import socket
+    import subprocess
+    import uuid
+    from sqlalchemy import update
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import Target
+
+    context = {"dns": {}, "whois": {}}
+
+    # DNS resolution
+    try:
+        results = socket.getaddrinfo(target_value, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        ips = list(set(addr[4][0] for addr in results))
+        context["dns"]["resolved_ips"] = ips
+        context["dns"]["record_count"] = len(ips)
+    except socket.gaierror:
+        context["dns"]["error"] = "DNS resolution failed"
+
+    # MX records
+    try:
+        import subprocess
+        result = subprocess.run(["dig", "+short", "MX", target_value], capture_output=True, text=True, timeout=10)
+        mx_records = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+        context["dns"]["mx_records"] = mx_records
+    except Exception:
+        pass
+
+    # NS records
+    try:
+        result = subprocess.run(["dig", "+short", "NS", target_value], capture_output=True, text=True, timeout=10)
+        ns_records = [line.strip() for line in result.stdout.strip().split("\n") if line.strip()]
+        context["dns"]["ns_records"] = ns_records
+    except Exception:
+        pass
+
+    # Save to DB
+    async with AsyncSessionLocal() as db:
+        await db.execute(
+            update(Target).where(Target.id == uuid.UUID(target_id)).values(context_data=context)
+        )
+        await db.commit()
+
+    logger.info(f"Target context enriched for {target_value}: {len(context.get('dns', {}).get('resolved_ips', []))} IPs")
+    return context

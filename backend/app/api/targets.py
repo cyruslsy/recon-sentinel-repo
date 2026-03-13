@@ -8,14 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
+from app.core.authorization import authorize_project
 from app.models.models import User, Target, Scan
 from app.schemas.schemas import TargetCreate, TargetResponse, TargetContextResponse
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
 @router.get("/", response_model=list[TargetResponse])
 async def list_targets(project_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await authorize_project(project_id, user, db)
     result = await db.execute(
         select(Target).where(Target.project_id == project_id).order_by(Target.created_at.desc())
     )
@@ -24,6 +29,7 @@ async def list_targets(project_id: UUID, user: User = Depends(get_current_user),
 
 @router.post("/", response_model=TargetResponse, status_code=201)
 async def create_target(project_id: UUID, data: TargetCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await authorize_project(project_id, user, db)
     target = Target(**data.model_dump(), project_id=project_id, created_by=user.id)
     db.add(target)
     await db.commit()
@@ -69,7 +75,11 @@ async def refresh_target_context(target_id: UUID, user: User = Depends(get_curre
     target = await db.get(Target, target_id)
     if not target:
         raise HTTPException(status_code=404, detail="Target not found")
-    # TODO: Dispatch async WHOIS/DNS lookup task via Celery
+
+    # Dispatch async context enrichment
+    from app.core.celery_app import celery_app as _celery
+    _celery.send_task("app.tasks.maintenance.enrich_target_context", args=[str(target_id), target.target_value])
+
     return {"status": "context_refresh_queued", "target_id": str(target_id)}
 
 

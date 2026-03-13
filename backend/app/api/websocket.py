@@ -84,17 +84,30 @@ async def scan_websocket(websocket: WebSocket, scan_id: str, token: str | None =
             action = data.get("action")
             
             if action == "approve_gate":
-                # TODO: Forward to scan lifecycle handler
+                # Forward gate decision to orchestrator via Celery
+                from app.tasks.orchestrator import handle_gate_decision
+                gate_num = data.get("gate_number", 1)
+                decision = data.get("decision", "approved")
+                modifications = data.get("modifications")
+                handle_gate_decision.delay(scan_id, gate_num, decision, modifications)
                 await websocket.send_json({
                     "event": "gate.decision_received",
-                    "data": {"gate_number": data.get("gate_number"), "decision": data.get("decision")}
+                    "data": {"gate_number": gate_num, "decision": decision}
                 })
             
             elif action == "health_decision":
-                # TODO: Forward to agent health handler
+                # Publish decision to Redis for the waiting agent
+                event_id = data.get("event_id")
+                decision = data.get("decision", "continue")
+                try:
+                    from app.core.redis import get_redis
+                    r = await get_redis()
+                    await r.publish(f"health_decision:{event_id}", decision)
+                except Exception:
+                    pass
                 await websocket.send_json({
                     "event": "health.decision_received",
-                    "data": {"event_id": data.get("event_id"), "decision": data.get("decision")}
+                    "data": {"event_id": event_id, "decision": decision}
                 })
             
             elif action == "pause_agent":
@@ -130,17 +143,59 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
         while True:
             data = await websocket.receive_json()
             content = data.get("content", "")
-            
-            # TODO: Stream LLM response token-by-token via LiteLLM
-            # For now, send placeholder
-            await websocket.send_json({
-                "event": "chat.token",
-                "data": {"token": f"[AI processing: {content[:50]}...] ", "done": False}
-            })
-            await websocket.send_json({
-                "event": "chat.complete",
-                "data": {"message_id": "placeholder", "cost_usd": 0.03}
-            })
+
+            # Stream LLM response via LiteLLM
+            try:
+                import litellm
+                from app.core.config import get_settings
+                s = get_settings()
+
+                MODELS = {"analysis": "anthropic/claude-sonnet-4-20250514"}
+                model = MODELS.get("analysis")
+
+                # Use streaming for real token-by-token delivery
+                response = await litellm.acompletion(
+                    model=model,
+                    messages=[{"role": "user", "content": content}],
+                    max_tokens=1000,
+                    stream=True,
+                )
+
+                full_text = ""
+                async for chunk in response:
+                    delta = chunk.choices[0].delta
+                    if delta and delta.content:
+                        full_text += delta.content
+                        await websocket.send_json({
+                            "event": "chat.token",
+                            "data": {"token": delta.content, "done": False}
+                        })
+
+                await websocket.send_json({
+                    "event": "chat.complete",
+                    "data": {"message_id": str(session_id), "content_length": len(full_text)}
+                })
+
+            except ImportError:
+                # litellm not available — fall back to non-streaming
+                from app.core.llm import llm_call
+                result = await llm_call(
+                    messages=[{"role": "user", "content": content}],
+                    model_tier="analysis", task_type="chat", max_tokens=1000,
+                )
+                await websocket.send_json({
+                    "event": "chat.token",
+                    "data": {"token": result.get("content", ""), "done": False}
+                })
+                await websocket.send_json({
+                    "event": "chat.complete",
+                    "data": {"message_id": str(session_id), "cost_usd": float(result.get("cost_usd", 0))}
+                })
+            except Exception as e:
+                await websocket.send_json({
+                    "event": "chat.error",
+                    "data": {"error": str(e)}
+                })
     
     except WebSocketDisconnect:
         pass

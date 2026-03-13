@@ -8,8 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
+from app.core.authorization import authorize_org, authorize_project
 from app.models.models import User, Project, ProjectMember
 from app.schemas.schemas import ProjectCreate, ProjectResponse
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -34,6 +38,7 @@ async def create_project(org_id: UUID, data: ProjectCreate, user: User = Depends
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(project_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await authorize_project(project_id, user, db)
     project = await db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -42,6 +47,7 @@ async def get_project(project_id: UUID, user: User = Depends(get_current_user), 
 
 @router.delete("/{project_id}", status_code=204)
 async def delete_project(project_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await authorize_project(project_id, user, db)
     project = await db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

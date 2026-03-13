@@ -36,7 +36,7 @@ export default class ErrorBoundary extends Component<Props, State> {
               <p className="text-sm text-sentinel-muted mb-4">
                 {this.state.error?.message || "An unexpected error occurred."}
               </p>
-              <button
+              <button aria-label="Retry after error"
                 onClick={() => this.setState({ hasError: false, error: null })}
                 className="bg-sentinel-accent text-white text-sm px-4 py-2 rounded"
               >

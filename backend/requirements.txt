@@ -37,3 +37,5 @@ python-docx==1.1.*
 pytest==8.3.*
 pytest-asyncio==0.24.*
 aiosqlite==0.20.*     # SQLite async driver for tests
+cryptography==42.*
+aiosmtplib==3.*

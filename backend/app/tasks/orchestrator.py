@@ -11,7 +11,6 @@ import json
 import uuid
 import logging
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
 from decimal import Decimal
 
 from app.core.celery_app import celery_app
@@ -251,7 +250,9 @@ class ScanOrchestrator:
         targets = self.state.discovered_targets or [self.state.target_value]
 
         # Cap fan-out to prevent resource exhaustion
-        max_targets = self.config.get("max_active_targets", 30) if hasattr(self, "config") else 30
+        from app.core.config import get_settings
+        _s = get_settings()
+        max_targets = getattr(_s, "MAX_ACTIVE_TARGETS", 30)
         if len(targets) > max_targets:
             logger.warning(
                 f"Capping active phase targets from {len(targets)} to {max_targets}. "
@@ -298,9 +299,26 @@ class ScanOrchestrator:
         await self._refresh_findings_summary()
 
     async def _generate_report(self) -> None:
+        """Generate scan report: create Report record, dispatch LLM generation."""
         await self._update_scan(ScanPhase.REPORT)
-        # TODO: Week 6 — Sonnet report generation
-        logger.info(f"Report generation placeholder for scan {self.state.scan_id}")
+
+        async with AsyncSessionLocal() as db:
+            from app.models.models import Report
+            report = Report(
+                scan_id=uuid.UUID(self.state.scan_id),
+                report_title=f"Recon Report — {self.state.target_value}",
+                file_path="pending",
+                generated_by=uuid.UUID("00000000-0000-0000-0000-000000000000"),  # system
+            )
+            db.add(report)
+            await db.commit()
+            await db.refresh(report)
+            report_id = str(report.id)
+
+        # Dispatch async report generation (LLM executive summary)
+        from app.tasks.reports import generate_report
+        generate_report.delay(report_id)
+        logger.info(f"Report generation dispatched for scan {self.state.scan_id}, report {report_id}")
 
     # ─── Gate Generation ──────────────────────────────────────
 
@@ -671,6 +689,7 @@ class ScanOrchestrator:
 @celery_app.task(name="app.tasks.orchestrator.start_scan")
 def start_scan(scan_id: str, target_value: str, project_id: str, profile: str = "full"):
     import asyncio
+    import signal as _signal
     from app.core.config import get_settings
     s = get_settings()
     state = ReconState(
@@ -680,8 +699,24 @@ def start_scan(scan_id: str, target_value: str, project_id: str, profile: str = 
         max_replan_cost_usd=s.LLM_MAX_REPLAN_COST_USD,
     )
     orchestrator = ScanOrchestrator(state)
-    final = asyncio.run(orchestrator.run_from_phase("passive"))
-    return {"status": final.current_phase, "findings": final.total_findings}
+
+    # Graceful shutdown: save checkpoint on SIGTERM before worker dies
+    def _handle_sigterm(signum, frame):
+        logger.warning(f"SIGTERM received during scan {scan_id} — saving checkpoint")
+        try:
+            asyncio.run(orchestrator._save_checkpoint())
+        except Exception as e:
+            logger.error(f"Failed to save checkpoint on SIGTERM: {e}")
+        raise SystemExit(1)
+
+    original_handler = _signal.getsignal(_signal.SIGTERM)
+    _signal.signal(_signal.SIGTERM, _handle_sigterm)
+
+    try:
+        final = asyncio.run(orchestrator.run_from_phase("passive"))
+        return {"status": final.current_phase, "findings": final.total_findings}
+    finally:
+        _signal.signal(_signal.SIGTERM, original_handler)
 
 
 @celery_app.task(name="app.tasks.orchestrator.handle_gate_decision")

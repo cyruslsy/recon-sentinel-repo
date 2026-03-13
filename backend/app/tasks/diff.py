@@ -232,23 +232,39 @@ async def _compute_diff(scan_id: str, prev_scan_id: str) -> dict:
 
 # ─── Helpers ──────────────────────────────────────────────────
 
-async def _load_findings(db, scan_id: uuid.UUID) -> list[dict]:
-    """Load all non-false-positive findings for a scan."""
-    result = await db.execute(
-        select(Finding)
-        .where(Finding.scan_id == scan_id, Finding.is_false_positive == False)  # noqa
-    )
-    return [
-        {
-            "id": str(f.id),
-            "fingerprint": f.fingerprint or f"{f.finding_type.value}:{f.value}",
-            "finding_type": f.finding_type.value,
-            "severity": f.severity.value if f.severity else "info",
-            "value": f.value,
-            "detail": f.detail or "",
-        }
-        for f in result.scalars().all()
-    ]
+async def _load_findings(db, scan_id: uuid.UUID, max_findings: int = 20000) -> list[dict]:
+    """
+    Load findings for a scan in batches to prevent OOM on large scans.
+    Cap at max_findings to bound memory usage.
+    """
+    findings = []
+    batch_size = 1000
+    offset = 0
+
+    while offset < max_findings:
+        result = await db.execute(
+            select(Finding)
+            .where(Finding.scan_id == scan_id, Finding.is_false_positive == False)  # noqa
+            .order_by(Finding.created_at)
+            .limit(batch_size)
+            .offset(offset)
+        )
+        batch = result.scalars().all()
+        if not batch:
+            break
+
+        for f in batch:
+            findings.append({
+                "id": str(f.id),
+                "fingerprint": f.fingerprint or f"{f.finding_type.value}:{f.value}",
+                "finding_type": f.finding_type.value,
+                "severity": f.severity.value if f.severity else "info",
+                "value": f.value,
+                "detail": f.detail or "",
+            })
+        offset += batch_size
+
+    return findings
 
 
 def _index_findings(findings: list[dict]) -> dict[str, dict]:

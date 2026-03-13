@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+  const [loading, setLoading] = useState(true);
 import { useRouter } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
@@ -27,6 +28,7 @@ export default function ScansPage() {
   async function loadScans() {
     try {
       setScans(await api.listScans("limit=50"));
+    setLoading(false);
     } catch {}
   }
 
@@ -66,6 +68,7 @@ export default function ScansPage() {
     s === "running" ? "🟢" : s === "paused" ? "🟡" : s === "completed" ? "✅" : "⬛";
 
   return (
+
     <AppLayout>
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
@@ -80,7 +83,7 @@ export default function ScansPage() {
 
         {/* Launch Form */}
         {showLaunch && (
-          <form onSubmit={handleLaunch} className="bg-sentinel-surface border border-sentinel-border rounded-lg p-5 mb-6">
+          <form onSubmit={handleLaunch} aria-label="Launch scan" className="bg-sentinel-surface border border-sentinel-border rounded-lg p-5 mb-6">
             {error && <div className="bg-sentinel-red/10 text-sentinel-red text-sm p-3 rounded mb-4">{error}</div>}
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>

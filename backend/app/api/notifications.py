@@ -8,14 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
+from app.core.authorization import authorize_project
 from app.models.models import User, NotificationChannelModel, NotificationLog
 from app.schemas.schemas import NotificationChannelCreate, NotificationChannelResponse, NotificationChannelUpdate
+
+import logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
 @router.get("/{project_id}/channels", response_model=list[NotificationChannelResponse])
 async def list_channels(project_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await authorize_project(project_id, user, db)
     result = await db.execute(
         select(NotificationChannelModel).where(NotificationChannelModel.project_id == project_id)
     )
@@ -24,8 +29,23 @@ async def list_channels(project_id: UUID, user: User = Depends(get_current_user)
 
 @router.post("/{project_id}/channels", response_model=NotificationChannelResponse, status_code=201)
 async def create_channel(project_id: UUID, data: NotificationChannelCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    config = data.model_dump().get("config", {})
+
+    # Encrypt SMTP password if present
+    if isinstance(config, dict) and "password" in config and config["password"]:
+        import hashlib, base64
+        from cryptography.fernet import Fernet
+        from app.core.config import get_settings
+        s = get_settings()
+        fernet_key = base64.urlsafe_b64encode(hashlib.sha256(s.JWT_SECRET_KEY.encode()).digest())
+        config["password"] = Fernet(fernet_key).encrypt(config["password"].encode()).decode()
+        config["_password_encrypted"] = True
+
+    channel_data = data.model_dump()
+    channel_data["config"] = config
+
     channel = NotificationChannelModel(
-        **data.model_dump(), project_id=project_id,
+        **channel_data, project_id=project_id,
         created_by=user.id,
     )
     db.add(channel)

@@ -21,6 +21,9 @@ from app.core.tz import utc_now
     ApprovalGateResponse, ApprovalGateDecision,
 )
 
+import logging
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -65,6 +68,7 @@ async def launch_scan(data: ScanCreate, user: User = Depends(get_current_user), 
     # Dispatch to Celery orchestrator
     from app.tasks.orchestrator import start_scan
     start_scan.delay(str(scan.id), target.target_value, str(target.project_id), scan.profile.value)
+    logger.info(f"Scan {scan.id} launched by user {user.id}")
 
     return scan
 
@@ -82,8 +86,24 @@ async def stop_scan(scan_id: UUID, user: User = Depends(get_current_user), db: A
         raise HTTPException(status_code=400, detail="Scan is not running")
     scan.status = ScanStatus.CANCELLED
     await db.commit()
-    # TODO: Celery revoke all running agent tasks
-    return {"status": "scan_stopped", "scan_id": str(scan_id)}
+    logger.info(f"Scan {scan_id} stopped by user {user.id}")
+
+    # Revoke all running agent tasks for this scan
+    from sqlalchemy import select as sel
+    from app.models.models import AgentRun
+    from app.core.celery_app import celery_app as _celery
+    result = await db.execute(
+        sel(AgentRun.celery_task_id).where(
+            AgentRun.scan_id == scan_id,
+            AgentRun.status.in_(["running", "queued"]),
+        )
+    )
+    task_ids = [r[0] for r in result.all() if r[0]]
+    for tid in task_ids:
+        _celery.control.revoke(tid, terminate=True, signal="SIGTERM")
+    logger.info(f"Revoked {len(task_ids)} agent tasks for scan {scan_id}")
+
+    return {"status": "scan_stopped", "scan_id": str(scan_id), "revoked_tasks": len(task_ids)}
 
 
 @router.post("/{scan_id}/pause")

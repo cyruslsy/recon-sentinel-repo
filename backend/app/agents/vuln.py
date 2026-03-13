@@ -21,7 +21,6 @@ import uuid
 from app.agents.base import BaseAgent
 from app.core.celery_app import celery_app
 from app.core.database import AsyncSessionLocal
-from app.core.tz import utc_now
 from app.models.models import Finding
 from app.models.enums import FindingSeverity, FindingType, ScanPhase, HealthEventType
 

@@ -31,7 +31,7 @@ from app.core.celery_app import celery_app
 from app.core.database import AsyncSessionLocal
 from app.core.tz import utc_now
 from app.models.models import NotificationChannelModel, NotificationLog, Finding
-from app.models.enums import NotificationEvent, NotificationChannel, FindingSeverity
+from app.models.enums import NotificationChannel, FindingSeverity
 
 logger = logging.getLogger(__name__)
 
@@ -334,9 +334,63 @@ async def _send_webhook(config: dict, event_type: str, payload: dict, http_clien
 
 
 async def _send_email(config: dict, event_type: str, payload: dict) -> tuple[bool, str | None]:
-    """Send email notification. Placeholder — needs SMTP integration."""
-    # TODO: Implement with aiosmtplib
-    return False, "Email notifications not yet implemented (use Slack/Discord/webhook)"
+    """Send email notification via SMTP."""
+    smtp_host = config.get("smtp_host")
+    smtp_port = config.get("smtp_port", 587)
+    from_addr = config.get("from", "sentinel@localhost")
+    to_addrs = config.get("to", [])
+    username = config.get("username")
+    password = config.get("password")
+
+    # Decrypt password if it was encrypted at storage time
+    if config.get("_password_encrypted") and password:
+        try:
+            import hashlib, base64
+            from cryptography.fernet import Fernet
+            from app.core.config import get_settings
+            s = get_settings()
+            fernet_key = base64.urlsafe_b64encode(hashlib.sha256(s.JWT_SECRET_KEY.encode()).digest())
+            password = Fernet(fernet_key).decrypt(password.encode()).decode()
+        except Exception:
+            return False, "Failed to decrypt SMTP password"
+
+    if not smtp_host or not to_addrs:
+        return False, "Email config incomplete — need smtp_host and to addresses"
+
+    subject = f"[Recon Sentinel] {_event_title(event_type)}"
+    message = _format_message(event_type, payload)
+
+    # Build email
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = from_addr
+    msg["To"] = ", ".join(to_addrs)
+    msg.attach(MIMEText(message, "plain"))
+
+    try:
+        import aiosmtplib
+        kwargs = {"hostname": smtp_host, "port": smtp_port, "timeout": 15}
+        if smtp_port == 465:
+            kwargs["use_tls"] = True
+        else:
+            kwargs["start_tls"] = True
+
+        await aiosmtplib.send(
+            msg,
+            sender=from_addr,
+            recipients=to_addrs,
+            username=username,
+            password=password,
+            **kwargs,
+        )
+        return True, None
+    except ImportError:
+        return False, "aiosmtplib not installed — run: pip install aiosmtplib"
+    except Exception as e:
+        return False, f"SMTP error: {e}"
 
 
 # ─── Formatting Helpers ───────────────────────────────────────

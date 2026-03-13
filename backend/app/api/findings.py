@@ -13,6 +13,9 @@ from app.models.models import User, Finding
 from app.models.enums import FindingSeverity, FindingType
 from app.schemas.schemas import FindingResponse, FindingBrief, FindingUpdate, FindingBulkAction
 
+import logging
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -45,7 +48,9 @@ async def list_findings(
     if tag:
         base_q = base_q.where(Finding.tags.any(tag))
     if search:
-        base_q = base_q.where(Finding.value.ilike(f"%{search}%") | Finding.detail.ilike(f"%{search}%"))
+        # Escape LIKE wildcards to prevent pattern injection
+        safe_search = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        base_q = base_q.where(Finding.value.ilike(f"%{safe_search}%") | Finding.detail.ilike(f"%{safe_search}%"))
     
     q = base_q.order_by(Finding.severity, Finding.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(q)

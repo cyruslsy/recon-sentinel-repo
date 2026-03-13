@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+  const [loading, setLoading] = useState(true);
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
 import type { ScopeItem, ScopeViolation } from "@/lib/types";
@@ -22,6 +23,7 @@ export default function ScopePage() {
         loadScope(projects[0].id);
         loadViolations(projects[0].id);
       }
+    setLoading(false);
     } catch {}
   }
 
@@ -55,6 +57,7 @@ export default function ScopePage() {
   const outScope = items.filter((i) => i.status === "out_of_scope");
 
   return (
+
     <AppLayout>
       <div className="max-w-5xl mx-auto">
         <h1 className="text-xl font-semibold mb-6">Scope Control</h1>
@@ -72,7 +75,7 @@ export default function ScopePage() {
         {tab === "scope" && (
           <>
             {/* Add Item Form */}
-            <form onSubmit={addItem} className="flex gap-3 mb-6">
+            <form onSubmit={addItem} aria-label="Add scope item" className="flex gap-3 mb-6">
               <select value={newItem.item_type} onChange={(e) => setNewItem((n) => ({ ...n, item_type: e.target.value }))}
                 className="bg-sentinel-bg border border-sentinel-border rounded px-3 py-1.5 text-sm">
                 <option value="domain">Domain</option>

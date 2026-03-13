@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+  const [loading, setLoading] = useState(true);
 import useSWR from "swr";
 import AppLayout from "@/components/AppLayout";
 import { api, fetcher } from "@/lib/api";
@@ -16,6 +17,7 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 function StatCard({ label, value, color }: { label: string; value: string | number; color?: string }) {
   return (
+
     <div className="bg-sentinel-card border border-sentinel-border rounded-lg p-4">
       <p className="text-xs text-sentinel-muted">{label}</p>
       <p className="text-2xl font-semibold mt-1" style={color ? { color } : {}}>
@@ -33,6 +35,7 @@ function ScanRow({ scan }: { scan: Scan }) {
     "text-sentinel-muted";
 
   return (
+
     <tr className="border-b border-sentinel-border/50 hover:bg-sentinel-hover/50 transition-colors">
       <td className="py-3 px-4 text-sm font-mono text-sentinel-muted">{scan.id?.slice(0, 8)}</td>
       <td className="py-3 px-4">
@@ -84,10 +87,12 @@ export default function DashboardPage() {
         critical: criticals,
         findings: totalFindings,
       });
+    setLoading(false);
     } catch {}
   }
 
   return (
+
     <AppLayout>
       <div className="max-w-7xl mx-auto">
         <h1 className="text-xl font-semibold mb-6">Dashboard</h1>
