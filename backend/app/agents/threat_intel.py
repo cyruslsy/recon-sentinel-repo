@@ -52,6 +52,8 @@ class ThreatIntelAgent(BaseAgent):
                     })
 
         # ─── VirusTotal Domain Report ─────────────────────────
+        # Shodan free: 1 req/s. VT free: 4 req/min. Add delays.
+        await asyncio.sleep(1.0)  # Respect Shodan rate limit before next API call
         await self.report_progress(60, "Querying VirusTotal...")
         vt_key = self.config.get("virustotal_api_key", "")
         if vt_key:
@@ -115,7 +117,7 @@ class ThreatIntelAgent(BaseAgent):
         return None
 
 
-@celery_app.task(name="app.agents.threat_intel.run_threat_intel_agent", bind=True)
-def run_threat_intel_agent(self, scan_id: str, target_value: str, project_id: str, config: dict | None = None):
+@celery_app.task(name="app.agents.threat_intel.run_threat_intel_agent")
+def run_threat_intel_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     import asyncio
     return asyncio.run(ThreatIntelAgent(scan_id, target_value, project_id, config).run())

@@ -180,6 +180,6 @@ class SSLTLSAgent(BaseAgent):
         return weak
 
 
-@celery_app.task(name="app.agents.ssl_tls.run_ssl_tls_agent", bind=True)
-def run_ssl_tls_agent(self, scan_id: str, target_value: str, project_id: str, config: dict | None = None):
+@celery_app.task(name="app.agents.ssl_tls.run_ssl_tls_agent")
+def run_ssl_tls_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     return asyncio.run(SSLTLSAgent(scan_id, target_value, project_id, config).run())

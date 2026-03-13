@@ -13,8 +13,13 @@ Uses the can-i-take-over-xyz fingerprint database approach:
 
 import hashlib
 import logging
+import warnings
 
 import httpx
+import urllib3
+
+# Suppress SSL warnings for takeover probes (targets often have invalid/expired certs)
+warnings.filterwarnings("ignore", category=urllib3.exceptions.InsecureRequestWarning)
 
 from app.agents.base import BaseAgent
 from app.core.celery_app import celery_app
@@ -261,20 +266,12 @@ class SubdomainTakeoverAgent(BaseAgent):
         return None  # CNAME matches a service but it's active — not takeover-able
 
     async def _get_cname(self, hostname: str) -> str | None:
-        try:
-            result = await self.run_command(["dig", "+short", hostname, "CNAME"], timeout=5, silent=True)
-            if result["returncode"] == 0 and result["stdout"].strip():
-                return result["stdout"].strip().split("\n")[0].rstrip(".")
-        except Exception:
-            pass
-        return None
+        from app.agents.dns_utils import get_cname
+        return await get_cname(self, hostname)
 
     async def _resolves(self, hostname: str) -> bool:
-        try:
-            result = await self.run_command(["dig", "+short", hostname, "A"], timeout=5, silent=True)
-            return bool(result["returncode"] == 0 and result["stdout"].strip())
-        except Exception:
-            return False
+        from app.agents.dns_utils import resolves
+        return await resolves(self, hostname)
 
     async def _probe_fingerprint(self, subdomain: str, fingerprints: list[str]) -> tuple[bool, str]:
         """HTTP GET the subdomain and check for takeover fingerprint strings."""
@@ -291,7 +288,7 @@ class SubdomainTakeoverAgent(BaseAgent):
         return False, ""
 
 
-@celery_app.task(name="app.agents.subdomain_takeover.run_subdomain_takeover_agent", bind=True)
-def run_subdomain_takeover_agent(self, scan_id: str, target_value: str, project_id: str, config: dict | None = None):
+@celery_app.task(name="app.agents.subdomain_takeover.run_subdomain_takeover_agent")
+def run_subdomain_takeover_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     import asyncio
     return asyncio.run(SubdomainTakeoverAgent(scan_id, target_value, project_id, config).run())

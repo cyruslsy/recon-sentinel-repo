@@ -163,12 +163,12 @@ class JSAnalysisAgent(BaseAgent):
 
     async def _get_live_hosts(self) -> list[str]:
         """Pull live web host URLs from this scan's findings."""
-        import uuid
+        import uuid as _uuid
         async with AsyncSessionLocal() as db:
             from sqlalchemy import select
             result = await db.execute(
                 select(Finding.value, Finding.raw_data)
-                .where(Finding.scan_id == uuid.UUID(self.scan_id))
+                .where(Finding.scan_id == _uuid.UUID(self.scan_id))
                 .where(Finding.finding_type == FindingType.SUBDOMAIN)
             )
             hosts = []
@@ -177,8 +177,13 @@ class JSAnalysisAgent(BaseAgent):
                     url = raw_data.get("url")
                     if url and url.startswith("http"):
                         hosts.append(url)
-                elif value.startswith("http"):
-                    hosts.append(value)
+                        continue
+                # Handle bare hostnames — prefix https://
+                clean = value.strip()
+                if clean.startswith("http"):
+                    hosts.append(clean)
+                elif "." in clean:
+                    hosts.append(f"https://{clean}")
             return list(set(hosts))
 
     # ─── Extract JS URLs ─────────────────────────────────────
@@ -295,7 +300,7 @@ class JSAnalysisAgent(BaseAgent):
         return findings
 
 
-@celery_app.task(name="app.agents.js_analysis.run_js_analysis_agent", bind=True)
-def run_js_analysis_agent(self, scan_id: str, target_value: str, project_id: str, config: dict | None = None):
+@celery_app.task(name="app.agents.js_analysis.run_js_analysis_agent")
+def run_js_analysis_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     import asyncio
     return asyncio.run(JSAnalysisAgent(scan_id, target_value, project_id, config).run())

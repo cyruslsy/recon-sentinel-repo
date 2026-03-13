@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
+from app.core.authorization import authorize_scan
 from app.models.models import User, Report
 from app.schemas.schemas import ReportCreate, ReportResponse
 

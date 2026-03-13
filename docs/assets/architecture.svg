@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 640" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="900" y2="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="900" height="640" rx="8" fill="url(#bg)"/>
+
+  <!-- Title -->
+  <text x="450" y="32" text-anchor="middle" font-family="system-ui, sans-serif" font-size="16" font-weight="600" fill="#e2e8f0">System Architecture</text>
+
+  <!-- ═══ FRONTEND ═══ -->
+  <rect x="280" y="50" width="340" height="60" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="450" y="75" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#93c5fd">Frontend — Next.js 14</text>
+  <text x="450" y="95" text-anchor="middle" font-family="ui-monospace, monospace" font-size="10" fill="#64748b">12 views · TypeScript · Tailwind · WebSocket</text>
+
+  <!-- Arrow down -->
+  <line x1="450" y1="110" x2="450" y2="135" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/></marker></defs>
+
+  <!-- ═══ NGINX ═══ -->
+  <rect x="340" y="135" width="220" height="40" rx="6" fill="#1a2332" stroke="#475569" stroke-width="1"/>
+  <text x="450" y="160" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" fill="#94a3b8">Nginx · TLS · Rate Limiting · HSTS</text>
+
+  <!-- Arrow down -->
+  <line x1="450" y1="175" x2="450" y2="200" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ═══ FASTAPI ═══ -->
+  <rect x="240" y="200" width="420" height="70" rx="8" fill="#1e293b" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="450" y="225" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#86efac">FastAPI Backend</text>
+  <text x="310" y="245" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">88 endpoints</text>
+  <text x="410" y="245" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">JWT + RBAC</text>
+  <text x="510" y="245" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">Audit log</text>
+  <text x="600" y="245" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">Multi-tenant</text>
+  <text x="450" y="260" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#475569">authorize_scan() · is_in_scope() · scope violations</text>
+
+  <!-- Arrows to DB and Redis -->
+  <line x1="360" y1="270" x2="220" y2="320" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="540" y1="270" x2="680" y2="320" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ═══ POSTGRESQL ═══ -->
+  <rect x="80" y="320" width="280" height="65" rx="8" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="220" y="345" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#fcd34d">PostgreSQL 16</text>
+  <text x="220" y="365" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">29 tables · 57 indexes · JSONB checkpoints · is_in_scope()</text>
+  <text x="220" y="378" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#475569">scan_diffs · notification_log · llm_usage_log · audit_log</text>
+
+  <!-- ═══ REDIS ═══ -->
+  <rect x="540" y="320" width="280" height="65" rx="8" fill="#1e293b" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="680" y="345" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#fca5a5">Redis 7</text>
+  <text x="680" y="365" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">Token blacklist · Rate limiting · Celery broker</text>
+  <text x="680" y="378" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#475569">Pub/sub scan events · API key lockout</text>
+
+  <!-- Arrow down to Celery -->
+  <line x1="450" y1="270" x2="450" y2="420" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ═══ CELERY ORCHESTRATOR ═══ -->
+  <rect x="120" y="420" width="660" height="100" rx="8" fill="#1e293b" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="450" y="445" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#c4b5fd">Celery Workers — LangGraph Orchestrator</text>
+
+  <!-- Phase boxes -->
+  <rect x="140" y="455" width="150" height="50" rx="5" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1"/>
+  <text x="215" y="475" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="500" fill="#93c5fd">Passive Phase</text>
+  <text x="215" y="492" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">5 agents</text>
+
+  <rect x="315" y="455" width="150" height="50" rx="5" fill="#1e3a5f" stroke="#22c55e" stroke-width="1"/>
+  <text x="390" y="475" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="500" fill="#86efac">Active Phase</text>
+  <text x="390" y="492" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">6 agents × N subs</text>
+
+  <rect x="490" y="455" width="150" height="50" rx="5" fill="#1e3a5f" stroke="#ef4444" stroke-width="1"/>
+  <text x="565" y="475" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="500" fill="#fca5a5">Vuln Phase</text>
+  <text x="565" y="492" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">Nuclei + Takeover</text>
+
+  <rect x="665" y="455" width="95" height="50" rx="5" fill="#1a2332" stroke="#f59e0b" stroke-width="1"/>
+  <text x="712" y="475" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="500" fill="#fcd34d">Report</text>
+  <text x="712" y="492" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">AI summary</text>
+
+  <!-- Phase arrows -->
+  <line x1="290" y1="480" x2="313" y2="480" stroke="#475569" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="465" y1="480" x2="488" y2="480" stroke="#475569" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="640" y1="480" x2="663" y2="480" stroke="#475569" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Gate labels -->
+  <text x="302" y="470" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#f59e0b">Gate 1</text>
+  <text x="477" y="470" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#f59e0b">Gate 2</text>
+
+  <!-- Arrow down to LLM -->
+  <line x1="450" y1="520" x2="450" y2="550" stroke="#475569" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- ═══ LLM ═══ -->
+  <rect x="260" y="550" width="380" height="60" rx="8" fill="#1e293b" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="450" y="575" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="600" fill="#d8b4fe">LiteLLM Gateway</text>
+  <text x="330" y="595" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">Haiku (routing)</text>
+  <text x="450" y="595" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">Sonnet (analysis)</text>
+  <text x="570" y="595" text-anchor="middle" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">Ollama (fallback)</text>
+
+  <!-- Notification arrow -->
+  <line x1="780" y1="470" x2="850" y2="470" stroke="#475569" stroke-width="1" marker-end="url(#arrow)"/>
+  <text x="850" y="460" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" fill="#94a3b8">Notifications</text>
+  <text x="850" y="478" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#64748b">Slack · Discord</text>
+  <text x="850" y="490" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#64748b">Telegram · Webhook</text>
+</svg>

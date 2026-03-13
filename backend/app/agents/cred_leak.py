@@ -124,6 +124,6 @@ class CredentialLeakAgent(BaseAgent):
             return []
 
 
-@celery_app.task(name="app.agents.cred_leak.run_cred_leak_agent", bind=True)
-def run_cred_leak_agent(self, scan_id: str, target_value: str, project_id: str, config: dict | None = None):
+@celery_app.task(name="app.agents.cred_leak.run_cred_leak_agent")
+def run_cred_leak_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     return asyncio.run(CredentialLeakAgent(scan_id, target_value, project_id, config).run())

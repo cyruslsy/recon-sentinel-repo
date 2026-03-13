@@ -61,5 +61,17 @@ async def test_notification(channel_id: UUID, user: User = Depends(get_current_u
     channel = await db.get(NotificationChannelModel, channel_id)
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
-    # TODO: Celery — notification_sender.send_test.delay(str(channel_id))
+    from app.tasks.notifications import dispatch_notification
+    dispatch_notification.delay(
+        event_type="scan_complete",
+        project_id=str(channel.project_id),
+        payload={
+            "target": "test.example.com",
+            "total_findings": 42,
+            "critical_count": 3,
+            "value": "Test notification from Recon Sentinel",
+            "detail": "If you see this, your notification channel is configured correctly.",
+            "severity": "info",
+        },
+    )
     return {"status": "test_notification_queued", "channel_type": channel.channel_type.value}

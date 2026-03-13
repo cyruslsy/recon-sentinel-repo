@@ -344,6 +344,13 @@ class BaseAgent(ABC):
                 "mitre_technique_ids": finding.mitre_technique_ids,
             })
 
+            # Real-time notification for critical/high findings
+            try:
+                from app.tasks.notifications import notify_critical_finding
+                await notify_critical_finding(self.scan_id, self.project_id, f)
+            except Exception:
+                pass  # Notification failure must never block agent execution
+
         await db.commit()
         return created
 

@@ -88,7 +88,7 @@ class OSINTAgent(BaseAgent):
         return items
 
 
-@celery_app.task(name="app.agents.osint.run_osint_agent", bind=True)
-def run_osint_agent(self, scan_id: str, target_value: str, project_id: str, config: dict | None = None):
+@celery_app.task(name="app.agents.osint.run_osint_agent")
+def run_osint_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     import asyncio
     return asyncio.run(OSINTAgent(scan_id, target_value, project_id, config).run())

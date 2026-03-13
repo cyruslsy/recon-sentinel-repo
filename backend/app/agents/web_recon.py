@@ -236,8 +236,8 @@ class WebReconAgent(BaseAgent):
 
 # ─── Celery Task ──────────────────────────────────────────────
 
-@celery_app.task(name="app.agents.web_recon.run_web_recon_agent", bind=True)
-def run_web_recon_agent(self, scan_id: str, target_value: str, project_id: str, config: dict | None = None):
+@celery_app.task(name="app.agents.web_recon.run_web_recon_agent")
+def run_web_recon_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     import asyncio
     agent = WebReconAgent(scan_id, target_value, project_id, config)
     return asyncio.run(agent.run())

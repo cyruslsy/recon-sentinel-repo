@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: "/credentials", label: "Credentials", icon: "🔑" },
   { href: "/scope", label: "Scope", icon: "◎" },
   { href: "/reports", label: "Reports", icon: "📄" },
+  { href: "/history", label: "Scan Diff", icon: "🔄" },
   { href: "/chat", label: "AI Copilot", icon: "💬" },
   { href: "/settings", label: "Settings", icon: "⚙" },
 ];

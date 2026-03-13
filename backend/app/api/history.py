@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
+from app.core.authorization import authorize_scan
 from app.models.models import User, ScanDiff, ScanDiffItem
 from app.schemas.schemas import ScanDiffResponse, ScanDiffItemResponse
 
@@ -51,5 +52,6 @@ async def list_diff_items(
 @router.post("/diff/{scan_id}/compute")
 async def compute_diff(scan_id: UUID, prev_scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Trigger diff computation between two scans."""
-    # TODO: Celery — diff_computer.compute.delay(str(scan_id), str(prev_scan_id))
+    from app.tasks.diff import compute_scan_diff
+    compute_scan_diff.delay(str(scan_id), str(prev_scan_id))
     return {"status": "diff_computation_queued", "scan_id": str(scan_id), "prev_scan_id": str(prev_scan_id)}

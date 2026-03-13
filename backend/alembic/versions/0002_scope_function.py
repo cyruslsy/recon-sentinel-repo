@@ -1,0 +1,96 @@
+"""create is_in_scope function
+
+Revision ID: 0002_scope_function
+Revises: 0001 (initial autogenerate)
+"""
+
+from alembic import op
+
+revision = "0002_scope_function"
+down_revision = None  # Set to actual initial migration ID after first autogenerate
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.execute("""
+    CREATE OR REPLACE FUNCTION is_in_scope(p_project_id UUID, p_target_value VARCHAR)
+    RETURNS BOOLEAN
+    LANGUAGE plpgsql
+    STABLE
+    AS $$
+    DECLARE
+        v_excluded BOOLEAN := FALSE;
+        v_included BOOLEAN := FALSE;
+        rec RECORD;
+    BEGIN
+        -- Check exclusions first (they take priority)
+        FOR rec IN
+            SELECT item_type, item_value
+            FROM scope_definitions
+            WHERE project_id = p_project_id AND status = 'out_of_scope'
+        LOOP
+            IF _scope_match(rec.item_type, rec.item_value, p_target_value) THEN
+                RETURN FALSE;
+            END IF;
+        END LOOP;
+
+        -- Check inclusions
+        FOR rec IN
+            SELECT item_type, item_value
+            FROM scope_definitions
+            WHERE project_id = p_project_id AND status = 'in_scope'
+        LOOP
+            IF _scope_match(rec.item_type, rec.item_value, p_target_value) THEN
+                RETURN TRUE;
+            END IF;
+        END LOOP;
+
+        -- No match = out of scope
+        RETURN FALSE;
+    END;
+    $$;
+
+    -- Helper: match a single scope rule against a target
+    CREATE OR REPLACE FUNCTION _scope_match(
+        p_item_type VARCHAR, p_item_value VARCHAR, p_target VARCHAR
+    )
+    RETURNS BOOLEAN
+    LANGUAGE plpgsql
+    IMMUTABLE
+    AS $$
+    BEGIN
+        CASE p_item_type
+            WHEN 'domain' THEN
+                -- Wildcard: *.example.com matches sub.example.com and example.com
+                IF p_item_value LIKE '*.%' THEN
+                    RETURN p_target = substring(p_item_value FROM 3)
+                        OR p_target LIKE '%.' || substring(p_item_value FROM 3);
+                ELSE
+                    RETURN p_target = p_item_value;
+                END IF;
+            WHEN 'ip' THEN
+                RETURN p_target = p_item_value;
+            WHEN 'cidr' THEN
+                BEGIN
+                    RETURN inet(p_target) <<= inet(p_item_value);
+                EXCEPTION WHEN OTHERS THEN
+                    RETURN FALSE;
+                END;
+            WHEN 'regex' THEN
+                BEGIN
+                    RETURN p_target ~ p_item_value;
+                EXCEPTION WHEN OTHERS THEN
+                    RETURN FALSE;
+                END;
+            ELSE
+                RETURN FALSE;
+        END CASE;
+    END;
+    $$;
+    """)
+
+
+def downgrade() -> None:
+    op.execute("DROP FUNCTION IF EXISTS is_in_scope(UUID, VARCHAR);")
+    op.execute("DROP FUNCTION IF EXISTS _scope_match(VARCHAR, VARCHAR, VARCHAR);")

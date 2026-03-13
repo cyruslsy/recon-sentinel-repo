@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.tz import utc_now
 from app.core.auth import get_current_user
+from app.core.authorization import authorize_scan
 from app.core.tz import utc_now
 from app.models.models import User, AgentRun, HealthEvent
 from app.core.tz import utc_now
@@ -22,6 +23,7 @@ router = APIRouter()
 
 @router.get("/", response_model=list[AgentRunBrief])
 async def list_agent_runs(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await authorize_scan(scan_id, user, db)
     result = await db.execute(
         select(AgentRun).where(AgentRun.scan_id == scan_id).order_by(AgentRun.phase, AgentRun.created_at)
     )

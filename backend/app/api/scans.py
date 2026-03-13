@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.tz import utc_now
 from app.core.auth import get_current_user
+from app.core.authorization import authorize_scan
 from app.core.tz import utc_now
 from app.models.models import User, Scan, ApprovalGate, Target
 from app.core.tz import utc_now
@@ -70,18 +71,13 @@ async def launch_scan(data: ScanCreate, user: User = Depends(get_current_user), 
 
 @router.get("/{scan_id}", response_model=ScanResponse)
 async def get_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    scan = await db.get(Scan, scan_id)
-    if not scan:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    return scan
+    return await authorize_scan(scan_id, user, db)
 
 
 @router.post("/{scan_id}/stop")
 async def stop_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Stop a running scan. All active agents are cancelled."""
-    scan = await db.get(Scan, scan_id)
-    if not scan:
-        raise HTTPException(status_code=404, detail="Scan not found")
+    scan = await authorize_scan(scan_id, user, db)
     if scan.status != ScanStatus.RUNNING:
         raise HTTPException(status_code=400, detail="Scan is not running")
     scan.status = ScanStatus.CANCELLED
@@ -93,9 +89,7 @@ async def stop_scan(scan_id: UUID, user: User = Depends(get_current_user), db: A
 @router.post("/{scan_id}/pause")
 async def pause_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Pause scan at current phase. Can be resumed later."""
-    scan = await db.get(Scan, scan_id)
-    if not scan:
-        raise HTTPException(status_code=404, detail="Scan not found")
+    scan = await authorize_scan(scan_id, user, db)
     scan.status = ScanStatus.PAUSED
     await db.commit()
     return {"status": "scan_paused", "scan_id": str(scan_id)}
@@ -103,16 +97,24 @@ async def pause_scan(scan_id: UUID, user: User = Depends(get_current_user), db: 
 
 @router.post("/{scan_id}/resume")
 async def resume_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Resume a paused scan from its LangGraph checkpoint."""
-    scan = await db.get(Scan, scan_id)
-    if not scan:
-        raise HTTPException(status_code=404, detail="Scan not found")
-    if scan.status != ScanStatus.PAUSED:
-        raise HTTPException(status_code=400, detail="Scan is not paused")
+    """Resume a paused or errored scan from its LangGraph checkpoint."""
+    scan = await authorize_scan(scan_id, user, db)
+    if scan.status not in (ScanStatus.PAUSED, ScanStatus.ERROR):
+        raise HTTPException(status_code=400, detail=f"Cannot resume scan with status '{scan.status.value}'")
+
+    # Verify checkpoint exists
+    if not scan.langgraph_checkpoint:
+        raise HTTPException(status_code=400, detail="No checkpoint found — scan cannot be resumed")
+
     scan.status = ScanStatus.RUNNING
+    scan.error_message = None
     await db.commit()
-    # TODO: Celery resume from checkpoint
-    return {"status": "scan_resumed", "scan_id": str(scan_id)}
+
+    # Dispatch orchestrator resume via Celery
+    from app.tasks.orchestrator import resume_scan_from_checkpoint
+    resume_scan_from_checkpoint.delay(str(scan_id))
+
+    return {"status": "scan_resumed", "scan_id": str(scan_id), "phase": scan.phase.value if scan.phase else "unknown"}
 
 
 @router.post("/{scan_id}/archive")

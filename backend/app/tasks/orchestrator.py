@@ -42,13 +42,15 @@ class ReconState:
     profile: str = "full"
     current_phase: str = "passive"
     phase_history: list[str] = field(default_factory=list)
-    passive_results: list[dict] = field(default_factory=list)
-    active_results: list[dict] = field(default_factory=list)
-    vuln_results: list[dict] = field(default_factory=list)
+    passive_results: list[dict] = field(default_factory=list)   # summary only: [{agent, status, findings_count}]
+    active_results: list[dict] = field(default_factory=list)    # summary only
+    vuln_results: list[dict] = field(default_factory=list)      # summary only
     findings_summary: dict = field(default_factory=dict)
     total_findings: int = 0
     critical_count: int = 0
     high_count: int = 0
+    # Discovered targets from passive phase — active agents fan out across these
+    discovered_targets: list[str] = field(default_factory=list)
     gate_1_decision: str | None = None
     gate_1_modifications: dict | None = None
     gate_2_decision: str | None = None
@@ -133,10 +135,27 @@ class ScanOrchestrator:
         self.state.completed_at = utc_now().isoformat()
         await self._update_scan(ScanPhase.DONE, ScanStatus.COMPLETED)
         await self._save_checkpoint()
+
+        # Auto-diff: compare against previous scan of same target
+        from app.tasks.diff import auto_diff_on_complete
+        auto_diff_on_complete.delay(self.state.scan_id)
+
         await self._broadcast("scan.complete", {
             "total_findings": self.state.total_findings,
             "llm_cost_usd": self.state.total_llm_cost_usd,
         })
+
+        # Notify configured channels
+        try:
+            from app.tasks.notifications import notify_scan_complete
+            await notify_scan_complete(
+                self.state.scan_id, self.state.project_id,
+                self.state.total_findings, self.state.critical_count,
+                self.state.target_value,
+            )
+        except Exception:
+            pass
+
         return self.state
 
     async def handle_gate_decision(self, gate_number: int, decision: str, modifications: dict | None = None) -> ReconState:
@@ -161,23 +180,81 @@ class ScanOrchestrator:
             "app.agents.threat_intel.run_threat_intel_agent",
             "app.agents.cred_leak.run_cred_leak_agent",
         ]
-        self.state.passive_results = await self._dispatch_agents(agents)
+        raw = await self._dispatch_agents(agents)
+        self.state.passive_results = self._summarize_results(raw)
         await self._refresh_findings_summary()
 
+        # Collect discovered targets for active phase fan-out
+        self.state.discovered_targets = await self._collect_discovered_targets()
+        logger.info(
+            f"Passive phase complete: {self.state.total_findings} findings, "
+            f"{len(self.state.discovered_targets)} targets for active phase"
+        )
+
     async def _run_active(self) -> None:
+        """
+        Fan-out: dispatch per-target agents across ALL discovered subdomains.
+        
+        Agent categories:
+          - PER-TARGET: run once for each discovered subdomain/host
+            (port_scan, web_recon, ssl_tls, dir_file, js_analysis)
+          - DOMAIN-LEVEL: run once against root domain only
+            (cloud — needs CNAME analysis across all subs, handled internally)
+        """
         await self._update_scan(ScanPhase.ACTIVE)
-        agents = [
+
+        per_target_agents = [
             "app.agents.port_scan.run_port_scan_agent",
             "app.agents.web_recon.run_web_recon_agent",
             "app.agents.ssl_tls.run_ssl_tls_agent",
             "app.agents.dir_file.run_dir_file_agent",
-            "app.agents.cloud.run_cloud_agent",
             "app.agents.js_analysis.run_js_analysis_agent",
         ]
+
+        domain_level_agents = [
+            "app.agents.cloud.run_cloud_agent",
+        ]
+
+        # Apply gate 1 modifications (user may skip certain agents)
         if self.state.gate_1_modifications:
             skip = self.state.gate_1_modifications.get("skip_agents", [])
-            agents = [a for a in agents if a.split(".")[-1].replace("run_", "").replace("_agent", "") not in skip]
-        self.state.active_results = await self._dispatch_agents(agents)
+            per_target_agents = [
+                a for a in per_target_agents
+                if a.split(".")[-1].replace("run_", "").replace("_agent", "") not in skip
+            ]
+            domain_level_agents = [
+                a for a in domain_level_agents
+                if a.split(".")[-1].replace("run_", "").replace("_agent", "") not in skip
+            ]
+
+        # Get targets to scan — discovered subdomains + root domain
+        targets = self.state.discovered_targets or [self.state.target_value]
+
+        # Cap fan-out to prevent resource exhaustion
+        max_targets = self.config.get("max_active_targets", 30) if hasattr(self, "config") else 30
+        if len(targets) > max_targets:
+            logger.warning(
+                f"Capping active phase targets from {len(targets)} to {max_targets}. "
+                f"Gate modifications or re-plan can adjust."
+            )
+            targets = targets[:max_targets]
+
+        logger.info(f"Active phase: {len(per_target_agents)} agents × {len(targets)} targets + {len(domain_level_agents)} domain-level")
+
+        # Dispatch per-target agents across all targets
+        all_results = []
+
+        # Fan-out: each target gets its own set of agent tasks
+        all_results.extend(
+            await self._dispatch_agents_fanout(per_target_agents, targets)
+        )
+
+        # Domain-level agents run once against root domain
+        all_results.extend(
+            await self._dispatch_agents(domain_level_agents)
+        )
+
+        self.state.active_results = self._summarize_results(all_results)
         await self._refresh_findings_summary()
 
     async def _run_vuln(self) -> None:
@@ -196,7 +273,8 @@ class ScanOrchestrator:
             elif action == "SKIP_AGENT" and "vuln" in agent_type:
                 agents = [a for a in agents if agent_type not in a]
 
-        self.state.vuln_results = await self._dispatch_agents(agents)
+        raw = await self._dispatch_agents(agents)
+        self.state.vuln_results = self._summarize_results(raw)
         await self._refresh_findings_summary()
 
     async def _generate_report(self) -> None:
@@ -214,11 +292,20 @@ class ScanOrchestrator:
         )
 
         summary = self.state.findings_summary
+        targets_info = ""
+        if gate_number == 1 and self.state.discovered_targets:
+            targets_info = (
+                f"\nDiscovered targets for active phase: {len(self.state.discovered_targets)} "
+                f"(will fan out 5 agents across each).\n"
+                f"Sample targets: {', '.join(self.state.discovered_targets[:10])}"
+            )
+
         prompt = (
             f"You are a security scan orchestrator. Summarize {phase_name} phase results.\n"
             f"Target: {self.state.target_value}\n"
             f"Findings: {self.state.total_findings} total, {self.state.critical_count} critical, {self.state.high_count} high\n"
-            f"Subdomains: {summary.get('subdomain_count', 0)}, Ports: {summary.get('port_count', 0)}\n\n"
+            f"Subdomains: {summary.get('subdomain_count', 0)}, Ports: {summary.get('port_count', 0)}"
+            f"{targets_info}\n\n"
             f"Respond with JSON: {{\"summary\": \"...\", \"risk_assessment\": \"...\", "
             f"\"recommendation\": \"...\", \"suggested_scope\": []}}"
         )
@@ -258,6 +345,16 @@ class ScanOrchestrator:
             "ai_summary": recommendation.get("summary", ""),
             "recommendation": recommendation,
         })
+
+        # Notify configured channels
+        try:
+            from app.tasks.notifications import notify_gate_ready
+            await notify_gate_ready(
+                self.state.scan_id, self.state.project_id,
+                gate_number, recommendation.get("summary", ""),
+            )
+        except Exception:
+            pass
 
     # ─── Re-Plan (Amendments #6, #16, #24) ────────────────────
 
@@ -319,6 +416,7 @@ class ScanOrchestrator:
     # ─── Agent Dispatch ───────────────────────────────────────
 
     async def _dispatch_agents(self, task_names: list[str]) -> list[dict]:
+        """Dispatch agents against the root target."""
         import asyncio
         from celery import group
         tasks = group(
@@ -329,12 +427,155 @@ class ScanOrchestrator:
         )
         try:
             result = tasks.apply_async()
-            # result.get() is synchronous/blocking — run in thread to avoid blocking event loop
-            results = await asyncio.to_thread(result.get, timeout=600)
-            return results if isinstance(results, list) else [results]
+            return await self._poll_result(result, timeout=600)
         except Exception as e:
             logger.error(f"Agent dispatch failed: {e}")
             return []
+
+    async def _dispatch_agents_fanout(self, task_names: list[str], targets: list[str]) -> list[dict]:
+        """
+        Fan-out: dispatch each agent for each target in chunks.
+        Chunks tasks to avoid overwhelming Celery workers.
+        E.g., 5 agents × 20 subdomains = 100 tasks, dispatched in chunks of 20.
+        """
+        import asyncio
+        from celery import group
+
+        if not task_names or not targets:
+            return []
+
+        # Build all task signatures
+        all_task_sigs = [
+            celery_app.send_task(agent_name, args=[
+                self.state.scan_id, target, self.state.project_id, {}
+            ])
+            for target in targets
+            for agent_name in task_names
+        ]
+
+        total = len(all_task_sigs)
+        chunk_size = 20  # Max concurrent tasks per chunk
+        logger.info(f"Fan-out: {total} tasks in chunks of {chunk_size}")
+
+        all_results = []
+        for i in range(0, total, chunk_size):
+            chunk = all_task_sigs[i:i + chunk_size]
+            chunk_group = group(chunk)
+
+            try:
+                result = chunk_group.apply_async()
+                chunk_results = await self._poll_result(result, timeout=600)
+                all_results.extend(chunk_results)
+                logger.info(f"Fan-out chunk {i // chunk_size + 1}: {len(chunk)} tasks completed")
+            except Exception as e:
+                logger.error(f"Fan-out chunk {i // chunk_size + 1} failed: {e}")
+
+        return all_results
+
+    async def _poll_result(self, result, timeout: int = 600) -> list[dict]:
+        """
+        Poll a Celery GroupResult without blocking a thread pool thread.
+        Checks result.ready() in an async loop instead of calling result.get().
+        """
+        import asyncio
+        elapsed = 0
+        poll_interval = 2  # seconds
+
+        while elapsed < timeout:
+            if result.ready():
+                try:
+                    results = result.get(timeout=5)  # Should be instant since ready()
+                    return results if isinstance(results, list) else [results]
+                except Exception as e:
+                    logger.error(f"Result retrieval failed: {e}")
+                    return []
+            await asyncio.sleep(poll_interval)
+            elapsed += poll_interval
+
+        logger.error(f"Task group timed out after {timeout}s")
+        return []
+
+    async def _collect_discovered_targets(self) -> list[str]:
+        """
+        After passive phase, collect all unique live subdomains/hosts for active phase.
+        Returns clean hostnames (no protocol, no path, no trailing port unless non-standard).
+        Includes resolved subdomains (not wildcards, not NXDOMAIN) + OSINT hosts.
+        """
+        from sqlalchemy import select
+        from app.models.models import Finding
+
+        targets = set()
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Finding.value, Finding.raw_data, Finding.tags)
+                .where(Finding.scan_id == uuid.UUID(self.state.scan_id))
+                .where(Finding.finding_type.in_(["subdomain", "osint"]))
+            )
+
+            for value, raw_data, tags in result.all():
+                # Skip wildcard subdomains
+                if tags and "wildcard" in tags:
+                    continue
+                # Skip NXDOMAIN (no resolved IPs)
+                if raw_data and isinstance(raw_data, dict):
+                    ips = raw_data.get("resolved_ips", [])
+                    if isinstance(ips, list) and not ips:
+                        continue
+
+                clean = self._clean_target(value)
+                if clean:
+                    targets.add(clean)
+
+        # Always include root target
+        targets.add(self._clean_target(self.state.target_value) or self.state.target_value)
+        return sorted(targets)
+
+    @staticmethod
+    def _clean_target(value: str) -> str | None:
+        """
+        Normalize a target value to a clean hostname.
+        'https://staging.example.com:8443/admin?x=1' → 'staging.example.com'
+        'api.example.com' → 'api.example.com'
+        'http://10.0.0.1' → '10.0.0.1'
+        """
+        clean = value.strip().lower()
+
+        # Strip protocol
+        if "://" in clean:
+            clean = clean.split("://", 1)[-1]
+
+        # Strip path and query string
+        clean = clean.split("/")[0]
+        clean = clean.split("?")[0]
+        clean = clean.split("#")[0]
+
+        # Strip port (agents will probe standard ports themselves)
+        if ":" in clean:
+            host_part = clean.rsplit(":", 1)[0]
+            # Keep it only if the remainder looks like a hostname/IP
+            if host_part and ("." in host_part or host_part.replace(":", "").isdigit()):
+                clean = host_part
+
+        clean = clean.strip(".")
+        if clean and ("." in clean or clean.replace(".", "").isdigit()):
+            return clean
+        return None
+
+    @staticmethod
+    def _summarize_results(raw_results: list) -> list[dict]:
+        """Cap result storage — keep only summary metadata, not raw agent output."""
+        summaries = []
+        for r in raw_results:
+            if isinstance(r, dict):
+                summaries.append({
+                    "status": r.get("status", "unknown"),
+                    "findings_count": r.get("findings_count", 0),
+                    "agent_type": r.get("agent_type", ""),
+                })
+            else:
+                summaries.append({"status": "completed", "raw_type": str(type(r).__name__)})
+        return summaries[:100]  # Hard cap at 100 entries
 
     # ─── DB Helpers ───────────────────────────────────────────
 
@@ -432,3 +673,23 @@ def handle_gate_decision(scan_id: str, gate_number: int, decision: str, modifica
 @celery_app.task(name="app.tasks.orchestrator.start_active_phase")
 def start_active_phase(scan_id: str, target_value: str, project_id: str):
     return handle_gate_decision(scan_id, 1, "approved")
+
+
+@celery_app.task(name="app.tasks.orchestrator.resume_scan_from_checkpoint")
+def resume_scan_from_checkpoint(scan_id: str):
+    """Resume a scan from its saved checkpoint. Used by POST /scans/{id}/resume."""
+    import asyncio
+
+    async def _resume():
+        async with AsyncSessionLocal() as db:
+            scan = await db.get(Scan, uuid.UUID(scan_id))
+            if not scan or not scan.langgraph_checkpoint:
+                raise ValueError(f"No checkpoint for scan {scan_id}")
+            state = ReconState.from_json(scan.langgraph_checkpoint)
+
+        logger.info(f"Resuming scan {scan_id} from phase: {state.current_phase}")
+        orchestrator = ScanOrchestrator(state)
+        return await orchestrator.run_from_phase()
+
+    final = asyncio.run(_resume())
+    return {"status": final.current_phase, "findings": final.total_findings}

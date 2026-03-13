@@ -222,8 +222,8 @@ class DirFileAgent(BaseAgent):
 
 # ─── Celery Task ──────────────────────────────────────────────
 
-@celery_app.task(name="app.agents.dir_file.run_dir_file_agent", bind=True)
-def run_dir_file_agent(self, scan_id: str, target_value: str, project_id: str, config: dict | None = None):
+@celery_app.task(name="app.agents.dir_file.run_dir_file_agent")
+def run_dir_file_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     import asyncio
     agent = DirFileAgent(scan_id, target_value, project_id, config)
     return asyncio.run(agent.run())

@@ -162,7 +162,15 @@ class CloudAssetAgent(BaseAgent):
     async def _enumerate_s3(self, domain: str) -> list[dict]:
         """Brute-force S3 bucket names based on domain patterns."""
         findings = []
-        base = domain.replace(".", "-").split(".")[0] if "." in domain else domain
+        # Extract root domain name for bucket generation
+        # staging.example.com → example, api.prod.example.co.uk → example
+        parts = domain.split(".")
+        if len(parts) >= 2:
+            # Skip TLD and ccTLD — use the label before that
+            base = parts[-2] if parts[-1] not in ("com", "org", "net", "io", "co") else parts[-2]
+        else:
+            base = parts[0]
+        base = base.replace(".", "-")
 
         bucket_names = set()
         for prefix in BUCKET_PREFIXES:
@@ -297,27 +305,18 @@ class CloudAssetAgent(BaseAgent):
 
         return findings
 
-    # ─── DNS Helpers ──────────────────────────────────────────
+    # ─── DNS Helpers (delegated to shared utils) ───────────────
 
     async def _get_cname(self, hostname: str) -> str | None:
-        try:
-            result = await self.run_command(["dig", "+short", hostname, "CNAME"], timeout=5, silent=True)
-            if result["returncode"] == 0 and result["stdout"].strip():
-                return result["stdout"].strip().rstrip(".")
-        except Exception:
-            pass
-        return None
+        from app.agents.dns_utils import get_cname
+        return await get_cname(self, hostname)
 
     async def _check_dangling(self, cname: str) -> bool:
-        """Check if a CNAME target is dangling (NXDOMAIN)."""
-        try:
-            result = await self.run_command(["dig", "+short", cname, "A"], timeout=5, silent=True)
-            return result["returncode"] == 0 and not result["stdout"].strip()
-        except Exception:
-            return False
+        from app.agents.dns_utils import is_dangling
+        return await is_dangling(self, cname)
 
 
-@celery_app.task(name="app.agents.cloud.run_cloud_agent", bind=True)
-def run_cloud_agent(self, scan_id: str, target_value: str, project_id: str, config: dict | None = None):
+@celery_app.task(name="app.agents.cloud.run_cloud_agent")
+def run_cloud_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     import asyncio
     return asyncio.run(CloudAssetAgent(scan_id, target_value, project_id, config).run())

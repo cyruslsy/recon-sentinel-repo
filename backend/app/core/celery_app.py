@@ -2,14 +2,42 @@
 Recon Sentinel — Celery Application
 Task queue with Redis broker, per-agent queue routing,
 and beat schedule for periodic tasks.
+
+IMPORTANT: This application requires the 'prefork' worker pool (Celery default).
+Agent tasks use asyncio.run() to execute async code, which creates a new event loop
+per task. This is INCOMPATIBLE with eventlet/gevent pools (which have their own
+event loop). Always start workers with:
+    celery -A app.core.celery_app worker --pool=prefork
+
+If you see "RuntimeError: This event loop is already running", you are using
+the wrong pool type.
 """
+
+import logging
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_init
 
 from app.core.config import get_settings
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+
+@worker_init.connect
+def _check_pool_type(**kwargs):
+    """Warn if worker is not using prefork pool (asyncio.run() requires it)."""
+    import celery.concurrency
+    pool_cls = getattr(celery.concurrency, "get_implementation", None)
+    # Best-effort check — log a warning, don't crash
+    try:
+        import billiard  # noqa: F401 — only exists with prefork
+    except ImportError:
+        logger.warning(
+            "billiard not found — Celery may not be using prefork pool. "
+            "Agent tasks require prefork (asyncio.run() is incompatible with eventlet/gevent)."
+        )
 
 celery_app = Celery(
     "recon_sentinel",
@@ -71,6 +99,21 @@ celery_app.conf.update(
         "refresh-target-context": {
             "task": "app.tasks.maintenance.refresh_target_context",
             "schedule": crontab(minute=0, hour=3),  # Daily at 3 AM
+        },
+        # Continuous monitoring: re-scan targets with monitoring enabled
+        "scheduled-rescan": {
+            "task": "app.tasks.monitoring.run_scheduled_rescans",
+            "schedule": crontab(minute=0, hour=6),  # Daily at 6 AM
+        },
+        # Recover scans stuck in running/paused for >2 hours
+        "recover-stuck-scans": {
+            "task": "app.tasks.maintenance.recover_stuck_scans",
+            "schedule": 900.0,  # Every 15 minutes
+        },
+        # Archive scans older than 90 days
+        "archive-old-scans": {
+            "task": "app.tasks.maintenance.archive_old_scans",
+            "schedule": crontab(minute=0, hour=4),  # Daily at 4 AM
         },
     },
 )

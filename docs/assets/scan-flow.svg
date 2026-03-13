@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="900" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/></marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#22c55e"/></marker>
+    <marker id="arrY" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#f59e0b"/></marker>
+  </defs>
+  <rect width="900" height="520" rx="8" fill="url(#bg)"/>
+  <text x="450" y="28" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" font-weight="600" fill="#e2e8f0">Scan Pipeline</text>
+
+  <!-- LAUNCH -->
+  <rect x="30" y="50" width="100" height="36" rx="6" fill="#22c55e20" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="80" y="73" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#86efac">Launch Scan</text>
+  <line x1="130" y1="68" x2="155" y2="68" stroke="#22c55e" stroke-width="1.5" marker-end="url(#arrG)"/>
+
+  <!-- PASSIVE PHASE -->
+  <rect x="160" y="42" width="190" height="140" rx="8" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="255" y="62" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#93c5fd">Phase 1: PASSIVE</text>
+  <text x="255" y="76" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#475569">No target interaction</text>
+  <text x="175" y="98" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; Subdomain Discovery</text>
+  <text x="175" y="112" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; OSINT (theHarvester)</text>
+  <text x="175" y="126" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; Email Security</text>
+  <text x="175" y="140" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; Threat Intelligence</text>
+  <text x="175" y="154" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; Credential Leak</text>
+  <text x="175" y="170" font-family="ui-monospace, monospace" font-size="8" fill="#22c55e">&#x2192; collect N subdomains</text>
+
+  <line x1="350" y1="112" x2="380" y2="112" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- GATE 1 -->
+  <rect x="385" y="80" width="70" height="65" rx="8" fill="#78350f" stroke="#f59e0b" stroke-width="2"/>
+  <text x="420" y="105" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="#fcd34d">GATE 1</text>
+  <text x="420" y="118" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" fill="#fbbf24">AI Summary</text>
+  <text x="420" y="132" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#fbbf24">&#x23F8; PAUSE</text>
+  <line x1="455" y1="112" x2="488" y2="112" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arrY)"/>
+  <text x="472" y="105" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" fill="#f59e0b">approve</text>
+
+  <!-- ACTIVE PHASE -->
+  <rect x="493" y="42" width="190" height="160" rx="8" fill="#14532d" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="588" y="62" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#86efac">Phase 2: ACTIVE</text>
+  <text x="588" y="76" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#475569">Fan-out: 6 agents x N subs</text>
+  <text x="508" y="96" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; Port Scan (Naabu+Nmap)</text>
+  <text x="508" y="110" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; Web Recon (httpx)</text>
+  <text x="508" y="124" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; SSL/TLS (OpenSSL)</text>
+  <text x="508" y="138" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; Dir/File (ffuf)</text>
+  <text x="508" y="152" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; JS Analysis (secrets)</text>
+  <text x="508" y="166" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; Cloud Assets (S3/Azure)</text>
+  <text x="508" y="186" font-family="ui-monospace, monospace" font-size="8" fill="#f59e0b">&#x21BB; self-correction: 404, WAF, rate</text>
+
+  <line x1="683" y1="112" x2="713" y2="112" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- GATE 2 -->
+  <rect x="718" y="80" width="70" height="65" rx="8" fill="#78350f" stroke="#f59e0b" stroke-width="2"/>
+  <text x="753" y="105" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="#fcd34d">GATE 2</text>
+  <text x="753" y="118" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" fill="#fbbf24">AI Summary</text>
+  <text x="753" y="132" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#fbbf24">&#x23F8; PAUSE</text>
+
+  <!-- RE-PLAN -->
+  <line x1="753" y1="145" x2="753" y2="230" stroke="#a855f7" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="688" y="235" width="130" height="50" rx="8" fill="#2e1065" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="753" y="257" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#d8b4fe">Re-plan Node</text>
+  <text x="753" y="274" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#7c3aed">Haiku | max 3 | $0.50 cap</text>
+  <line x1="753" y1="285" x2="753" y2="320" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- VULN PHASE -->
+  <rect x="600" y="325" width="200" height="70" rx="8" fill="#450a0a" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="700" y="348" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#fca5a5">Phase 3: VULN</text>
+  <text x="615" y="368" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; Nuclei (tech templates)</text>
+  <text x="615" y="382" font-family="ui-monospace, monospace" font-size="9" fill="#94a3b8">&#x25CF; Subdomain Takeover</text>
+  <line x1="600" y1="360" x2="530" y2="360" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- REPORT -->
+  <rect x="360" y="330" width="165" height="55" rx="8" fill="#1e293b" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="442" y="353" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#c4b5fd">Report Generation</text>
+  <text x="442" y="370" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#64748b">Sonnet executive summary</text>
+  <text x="442" y="382" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#64748b">MITRE ATT&amp;CK mapping</text>
+  <line x1="360" y1="358" x2="300" y2="358" stroke="#475569" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- AUTO-DIFF -->
+  <rect x="130" y="330" width="165" height="55" rx="8" fill="#1e293b" stroke="#06b6d4" stroke-width="1.5"/>
+  <text x="212" y="353" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#67e8f9">Auto-Diff</text>
+  <text x="212" y="370" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#64748b">vs previous scan</text>
+  <text x="212" y="382" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#64748b">AI change summary</text>
+  <line x1="212" y1="385" x2="212" y2="420" stroke="#22c55e" stroke-width="1.5" marker-end="url(#arrG)"/>
+
+  <!-- DONE -->
+  <rect x="140" y="425" width="145" height="36" rx="6" fill="#22c55e20" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="212" y="448" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#86efac">&#x2713; SCAN COMPLETE</text>
+  <line x1="285" y1="443" x2="355" y2="443" stroke="#f59e0b" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrY)"/>
+  <text x="360" y="438" font-family="ui-monospace, monospace" font-size="8" fill="#f59e0b">&#x2192; Slack / Discord / Webhook</text>
+  <text x="360" y="452" font-family="ui-monospace, monospace" font-size="8" fill="#64748b">"42 findings, 3 critical"</text>
+
+  <!-- DAILY RE-SCAN LOOP -->
+  <text x="55" y="440" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#06b6d4">Celery Beat</text>
+  <text x="55" y="452" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" fill="#06b6d4">daily 6AM</text>
+  <path d="M 70 460 Q 20 460 20 400 Q 20 50 80 50" stroke="#06b6d4" stroke-width="1" fill="none" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+
+  <!-- Legend -->
+  <rect x="610" y="430" width="270" height="75" rx="6" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <text x="625" y="448" font-family="system-ui, sans-serif" font-size="9" font-weight="500" fill="#94a3b8">Legend</text>
+  <line x1="625" y1="460" x2="650" y2="460" stroke="#f59e0b" stroke-width="2"/><text x="660" y="464" font-family="ui-monospace, monospace" font-size="8" fill="#94a3b8">Human approval gate</text>
+  <line x1="625" y1="474" x2="650" y2="474" stroke="#a855f7" stroke-width="2"/><text x="660" y="478" font-family="ui-monospace, monospace" font-size="8" fill="#94a3b8">AI re-plan (Haiku LLM)</text>
+  <line x1="625" y1="488" x2="650" y2="488" stroke="#06b6d4" stroke-width="2" stroke-dasharray="4 3"/><text x="660" y="492" font-family="ui-monospace, monospace" font-size="8" fill="#94a3b8">Continuous monitoring loop</text>
+</svg>

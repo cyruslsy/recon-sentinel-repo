@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
+from app.core.authorization import authorize_scan, authorize_finding
 from app.models.models import User, Finding
 from app.models.enums import FindingSeverity, FindingType
 from app.schemas.schemas import FindingResponse, FindingBrief, FindingUpdate, FindingBulkAction
@@ -24,27 +25,29 @@ async def list_findings(
     is_false_positive: bool | None = None,
     tag: str | None = None,
     search: str | None = None,
-    limit: int = Query(50, le=500),
+    limit: int = Query(50, le=200),
     offset: int = 0,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List findings with comprehensive filtering."""
-    q = select(Finding).where(Finding.scan_id == scan_id).order_by(Finding.severity, Finding.created_at.desc())
+    """List findings with comprehensive filtering. Max 200 per page."""
+    await authorize_scan(scan_id, user, db)
+    base_q = select(Finding).where(Finding.scan_id == scan_id)
     
     if severity:
-        q = q.where(Finding.severity == severity)
+        base_q = base_q.where(Finding.severity == severity)
     if finding_type:
-        q = q.where(Finding.finding_type == finding_type)
+        base_q = base_q.where(Finding.finding_type == finding_type)
     if mitre_technique:
-        q = q.where(Finding.mitre_technique_ids.any(mitre_technique))
+        base_q = base_q.where(Finding.mitre_technique_ids.any(mitre_technique))
     if is_false_positive is not None:
-        q = q.where(Finding.is_false_positive == is_false_positive)
+        base_q = base_q.where(Finding.is_false_positive == is_false_positive)
     if tag:
-        q = q.where(Finding.tags.any(tag))
+        base_q = base_q.where(Finding.tags.any(tag))
     if search:
-        q = q.where(Finding.value.ilike(f"%{search}%") | Finding.detail.ilike(f"%{search}%"))
+        base_q = base_q.where(Finding.value.ilike(f"%{search}%") | Finding.detail.ilike(f"%{search}%"))
     
-    q = q.limit(limit).offset(offset)
+    q = base_q.order_by(Finding.severity, Finding.created_at.desc()).limit(limit).offset(offset)
     result = await db.execute(q)
     return result.scalars().all()
 

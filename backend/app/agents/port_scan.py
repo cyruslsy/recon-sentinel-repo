@@ -247,8 +247,8 @@ class PortScanAgent(BaseAgent):
 
 # ─── Celery Task ──────────────────────────────────────────────
 
-@celery_app.task(name="app.agents.port_scan.run_port_scan_agent", bind=True)
-def run_port_scan_agent(self, scan_id: str, target_value: str, project_id: str, config: dict | None = None):
+@celery_app.task(name="app.agents.port_scan.run_port_scan_agent")
+def run_port_scan_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     import asyncio
     agent = PortScanAgent(scan_id, target_value, project_id, config)
     return asyncio.run(agent.run())

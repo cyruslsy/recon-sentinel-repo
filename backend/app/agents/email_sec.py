@@ -120,7 +120,7 @@ class EmailSecurityAgent(BaseAgent):
         return []
 
 
-@celery_app.task(name="app.agents.email_sec.run_email_sec_agent", bind=True)
-def run_email_sec_agent(self, scan_id: str, target_value: str, project_id: str, config: dict | None = None):
+@celery_app.task(name="app.agents.email_sec.run_email_sec_agent")
+def run_email_sec_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     import asyncio
     return asyncio.run(EmailSecurityAgent(scan_id, target_value, project_id, config).run())

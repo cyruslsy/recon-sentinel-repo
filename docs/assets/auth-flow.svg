@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 200" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="700" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/></marker>
+    <marker id="aR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444"/></marker>
+    <marker id="aG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#22c55e"/></marker>
+  </defs>
+  <rect width="700" height="200" rx="8" fill="url(#bg)"/>
+  <text x="350" y="24" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#e2e8f0">Authorization Chain</text>
+
+  <!-- Request -->
+  <rect x="20" y="60" width="90" height="36" rx="6" fill="#1e3a5f" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="65" y="83" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="600" fill="#93c5fd">API Request</text>
+  <line x1="110" y1="78" x2="135" y2="78" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- JWT -->
+  <rect x="140" y="60" width="80" height="36" rx="6" fill="#1e293b" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="180" y="78" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" font-weight="500" fill="#86efac">JWT Valid?</text>
+  <text x="180" y="90" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" fill="#64748b">get_current_user</text>
+  <line x1="220" y1="78" x2="248" y2="78" stroke="#22c55e" stroke-width="1.5" marker-end="url(#aG)"/>
+  <line x1="180" y1="96" x2="180" y2="140" stroke="#ef4444" stroke-width="1" marker-end="url(#aR)"/>
+  <text x="180" y="158" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" font-weight="600" fill="#ef4444">401</text>
+
+  <!-- Admin check -->
+  <rect x="253" y="60" width="80" height="36" rx="6" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="293" y="78" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" font-weight="500" fill="#fcd34d">Admin?</text>
+  <text x="293" y="90" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" fill="#64748b">role == admin</text>
+  <line x1="333" y1="63" x2="628" y2="63" stroke="#22c55e" stroke-width="1" stroke-dasharray="3 3"/>
+  <text x="480" y="57" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" fill="#22c55e">bypass &#x2192;</text>
+  <line x1="333" y1="85" x2="358" y2="85" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Owner check -->
+  <rect x="363" y="60" width="95" height="36" rx="6" fill="#1e293b" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="410" y="78" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" font-weight="500" fill="#c4b5fd">Created by</text>
+  <text x="410" y="90" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" fill="#64748b">scan.created_by?</text>
+  <line x1="458" y1="78" x2="483" y2="78" stroke="#475569" stroke-width="1.5" marker-end="url(#a)"/>
+
+  <!-- Membership check -->
+  <rect x="488" y="60" width="110" height="36" rx="6" fill="#1e293b" stroke="#06b6d4" stroke-width="1.5"/>
+  <text x="543" y="75" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" font-weight="500" fill="#67e8f9">Project Member?</text>
+  <text x="543" y="90" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" fill="#64748b">scan&#x2192;target&#x2192;project</text>
+
+  <line x1="598" y1="78" x2="623" y2="78" stroke="#22c55e" stroke-width="1.5" marker-end="url(#aG)"/>
+  <line x1="543" y1="96" x2="543" y2="140" stroke="#ef4444" stroke-width="1" marker-end="url(#aR)"/>
+  <text x="543" y="158" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" font-weight="600" fill="#ef4444">403</text>
+
+  <!-- Access granted -->
+  <rect x="628" y="55" width="55" height="46" rx="6" fill="#22c55e20" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="655" y="76" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="700" fill="#86efac">&#x2713;</text>
+  <text x="655" y="92" text-anchor="middle" font-family="ui-monospace, monospace" font-size="7" fill="#86efac">200</text>
+</svg>

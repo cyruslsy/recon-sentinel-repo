@@ -157,8 +157,8 @@ class SubdomainAgent(BaseAgent):
 
 # ─── Celery Task ──────────────────────────────────────────────
 
-@celery_app.task(name="app.agents.subdomain.run_subdomain_agent", bind=True)
-def run_subdomain_agent(self, scan_id: str, target_value: str, project_id: str, config: dict | None = None):
+@celery_app.task(name="app.agents.subdomain.run_subdomain_agent")
+def run_subdomain_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     """Celery task wrapper — runs the async agent in an event loop."""
     import asyncio
     agent = SubdomainAgent(scan_id, target_value, project_id, config)

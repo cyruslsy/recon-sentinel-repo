@@ -219,12 +219,28 @@ async def _check_budget() -> None:
             current_spend = result.scalar() or Decimal("0")
 
         if current_spend >= budget:
+            # Notify all projects about budget exhaustion
+            try:
+                from app.tasks.notifications import dispatch_notification
+                dispatch_notification.delay(
+                    event_type="agent_error",
+                    project_id="00000000-0000-0000-0000-000000000000",  # broadcast
+                    payload={
+                        "agent_name": "LLM Budget",
+                        "severity": "critical",
+                        "value": f"Monthly LLM budget exhausted: ${current_spend:.2f} / ${budget:.2f}",
+                        "detail": "All AI features (gate summaries, reports, chat) are paused until next month or budget increase.",
+                    },
+                )
+            except Exception:
+                pass
             raise BudgetExceededError(
                 f"Monthly LLM budget exhausted: ${current_spend:.2f} / ${budget:.2f}"
             )
 
-        if current_spend / budget > Decimal("0.8"):
-            logger.warning(f"LLM budget at {current_spend/budget*100:.0f}%: ${current_spend:.2f} / ${budget:.2f}")
+        pct = current_spend / budget
+        if pct > Decimal("0.8"):
+            logger.warning(f"LLM budget at {pct*100:.0f}%: ${current_spend:.2f} / ${budget:.2f}")
 
     except BudgetExceededError:
         raise
