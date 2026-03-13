@@ -38,12 +38,12 @@ services:
     image: redis:7-alpine
     container_name: sentinel-redis
     restart: always
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass "${REDIS_PASSWORD:-changeme}"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass "${REDIS_PASSWORD:-sentinel-redis-secret}"
     volumes:
       - redisdata:/data
     # NO ports exposed
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "sentinel-redis-secret", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-sentinel-redis-secret}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

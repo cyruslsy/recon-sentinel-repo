@@ -36,18 +36,11 @@ async def create_organization(data: OrganizationCreate, user: User = Depends(get
 
 @router.get("/{org_id}", response_model=OrganizationResponse)
 async def get_organization(org_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    await authorize_org(org_id, user, db)
-    org = await db.get(Organization, org_id)
-    if not org:
-        raise HTTPException(status_code=404, detail="Organization not found")
-    return org
+    return await authorize_org(org_id, user, db)
 
 
 @router.delete("/{org_id}", status_code=204)
 async def delete_organization(org_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    await authorize_org(org_id, user, db)
-    org = await db.get(Organization, org_id)
-    if not org:
-        raise HTTPException(status_code=404, detail="Organization not found")
+    org = await authorize_org(org_id, user, db)
     await db.delete(org)
     await db.commit()

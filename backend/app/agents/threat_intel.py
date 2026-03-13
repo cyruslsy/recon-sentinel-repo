@@ -4,6 +4,7 @@ Sources: Shodan (host intel), VirusTotal (domain reputation)
 MITRE: T1590 (Gather Victim Network Information)
 """
 
+import asyncio
 import hashlib
 import logging
 

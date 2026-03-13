@@ -21,14 +21,14 @@ export default function ScansPage() {
   const [profile, setProfile] = useState("full");
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => { loadScans(); }, []);
 
   async function loadScans() {
     try {
       setScans(await api.listScans("limit=50"));
-    setLoading(false);
-    } catch {}
+    } catch {} finally { setLoading(false); }
   }
 
   async function handleLaunch(e: React.FormEvent) {

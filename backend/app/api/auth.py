@@ -12,8 +12,8 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import (
 from app.core.tz import utc_now
+from app.core.auth import (
     create_access_token, create_refresh_token, decode_token,
     get_current_user, hash_password, revoke_token, verify_password,
 )

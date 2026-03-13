@@ -30,6 +30,9 @@ async def list_sessions(scan_id: UUID | None = None, user: User = Depends(get_cu
     if scan_id:
         await authorize_scan(scan_id, user, db)
         q = q.where(ChatSession.scan_id == scan_id)
+    else:
+        # Scope to current user's sessions only
+        q = q.where(ChatSession.user_id == user.id)
     result = await db.execute(q)
     sessions = result.scalars().all()
     

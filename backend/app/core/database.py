@@ -102,8 +102,6 @@ async def get_db_with_rls(user_id: str) -> AsyncSession:
             except Exception:
                 await session.rollback()
                 raise
-        finally:
-            await session.close()
 
 
 async def init_db():

@@ -66,6 +66,7 @@ function ScanRow({ scan }: { scan: Scan }) {
 export default function DashboardPage() {
   const [scans, setScans] = useState<Scan[]>([]);
   const [stats, setStats] = useState({ total: 0, running: 0, critical: 0, findings: 0 });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadDashboard();
@@ -86,8 +87,7 @@ export default function DashboardPage() {
         critical: criticals,
         findings: totalFindings,
       });
-    setLoading(false);
-    } catch {}
+    } catch {} finally { setLoading(false); }
   }
 
   return (

@@ -46,7 +46,6 @@ async def get_target(target_id: UUID, user: User = Depends(get_current_user), db
 async def get_target_context(target_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """P1: Target Context Panel — WHOIS, ASN, CDN, tech stack, previous scans."""
     target = await authorize_target(target_id, user, db)
-        raise HTTPException(status_code=404, detail="Target not found")
     
     scan_count = await db.execute(
         select(func.count()).select_from(Scan).where(Scan.target_id == target_id)
@@ -69,7 +68,6 @@ async def get_target_context(target_id: UUID, user: User = Depends(get_current_u
 async def refresh_target_context(target_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Trigger WHOIS/DNS/tech detection refresh for target context panel."""
     target = await authorize_target(target_id, user, db)
-        raise HTTPException(status_code=404, detail="Target not found")
 
     # Dispatch async context enrichment
     from app.core.celery_app import celery_app as _celery

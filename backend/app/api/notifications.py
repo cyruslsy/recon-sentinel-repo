@@ -56,9 +56,7 @@ async def create_channel(project_id: UUID, data: NotificationChannelCreate, user
 
 @router.patch("/channels/{channel_id}", response_model=NotificationChannelResponse)
 async def update_channel(channel_id: UUID, data: NotificationChannelUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    channel = await db.get(NotificationChannelModel, channel_id)
-    if not channel:
-        raise HTTPException(status_code=404, detail="Channel not found")
+    channel = await authorize_notification_channel(channel_id, user, db)
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(channel, key, value)
     await db.commit()
@@ -76,9 +74,7 @@ async def delete_channel(channel_id: UUID, user: User = Depends(get_current_user
 @router.post("/channels/{channel_id}/test")
 async def test_notification(channel_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Send a test notification to verify channel configuration."""
-    channel = await db.get(NotificationChannelModel, channel_id)
-    if not channel:
-        raise HTTPException(status_code=404, detail="Channel not found")
+    channel = await authorize_notification_channel(channel_id, user, db)
     from app.tasks.notifications import dispatch_notification
     dispatch_notification.delay(
         event_type="scan_complete",

@@ -38,24 +38,24 @@ logger = logging.getLogger(__name__)
 
 # ─── SSRF Protection ─────────────────────────────────────────
 
-def _is_safe_url(url: str) -> tuple[bool, str]:
+def _is_safe_url(url: str) -> tuple[bool, str, str | None]:
     """
     Validate a webhook URL is not targeting internal/private infrastructure.
-    Blocks: private IPs (v4+v6), localhost, link-local, cloud metadata,
-    non-http schemes, DNS rebinding (resolves hostname to IP before check).
+    Returns (safe, reason, resolved_ip). The resolved_ip should be used to
+    pin the connection and prevent DNS rebinding TOCTOU attacks.
     """
     try:
         parsed = urlparse(url)
     except Exception:
-        return False, "Invalid URL"
+        return False, "Invalid URL", None
 
     # Block dangerous schemes
     if parsed.scheme not in ("http", "https"):
-        return False, f"Blocked scheme: {parsed.scheme}"
+        return False, f"Blocked scheme: {parsed.scheme}", None
 
     hostname = parsed.hostname
     if not hostname:
-        return False, "No hostname"
+        return False, "No hostname", None
 
     # Block obvious internal hostnames
     blocked_hosts = {
@@ -66,26 +66,26 @@ def _is_safe_url(url: str) -> tuple[bool, str]:
         "fd00::1",          # IPv6 ULA
     }
     if hostname.lower().strip("[]") in blocked_hosts:
-        return False, f"Blocked host: {hostname}"
+        return False, f"Blocked host: {hostname}", None
 
     # Block internal TLDs
     blocked_suffixes = (".internal", ".local", ".localhost", ".corp", ".home", ".lan")
     if any(hostname.lower().endswith(s) for s in blocked_suffixes):
-        return False, f"Blocked internal hostname: {hostname}"
+        return False, f"Blocked internal hostname: {hostname}", None
 
     # Check if hostname is a raw IP (v4 or v6)
     try:
         ip = ipaddress.ip_address(hostname.strip("[]"))
         safe, reason = _is_safe_ip(ip)
         if not safe:
-            return False, reason
+            return False, reason, None
+        return True, "", hostname.strip("[]")
     except ValueError:
         # Hostname, not IP — resolve to IP to prevent DNS rebinding
-        safe, reason = _resolve_and_check(hostname)
+        safe, reason, resolved_ip = _resolve_and_check(hostname)
         if not safe:
-            return False, reason
-
-    return True, ""
+            return False, reason, None
+        return True, "", resolved_ip
 
 
 def _is_safe_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> tuple[bool, str]:
@@ -118,13 +118,14 @@ def _is_safe_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> tuple[bool
     return True, ""
 
 
-def _resolve_and_check(hostname: str) -> tuple[bool, str]:
+def _resolve_and_check(hostname: str) -> tuple[bool, str, str | None]:
     """
     Resolve hostname to IP BEFORE making the request (DNS rebinding protection).
-    Uses synchronous socket.getaddrinfo since this runs in a Celery worker
-    (not the FastAPI event loop). For FastAPI context, wrap in run_in_executor.
+    Returns (safe, reason, resolved_ip) — resolved_ip is the first safe IP found.
+    Uses synchronous socket.getaddrinfo since this runs in a Celery worker.
     """
     import socket
+    first_safe_ip = None
     try:
         results = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
         for family, _, _, _, sockaddr in results:
@@ -133,15 +134,17 @@ def _resolve_and_check(hostname: str) -> tuple[bool, str]:
                 ip = ipaddress.ip_address(ip_str)
                 safe, reason = _is_safe_ip(ip)
                 if not safe:
-                    return False, f"DNS resolves to blocked IP: {hostname} → {ip} ({reason})"
+                    return False, f"DNS resolves to blocked IP: {hostname} → {ip} ({reason})", None
+                if first_safe_ip is None:
+                    first_safe_ip = ip_str
             except ValueError:
                 continue
     except socket.gaierror:
-        return False, f"DNS resolution failed: {hostname}"
+        return False, f"DNS resolution failed: {hostname}", None
     except Exception as e:
-        return False, f"DNS check failed: {e}"
+        return False, f"DNS check failed: {e}", None
 
-    return True, ""
+    return True, "", first_safe_ip
 
 
 # ─── Main Dispatch ────────────────────────────────────────────
@@ -222,12 +225,25 @@ async def _send_to_channel(channel: NotificationChannelModel, event_type: str, p
         return False, str(e)[:500]
 
 
+async def _pinned_request(http_client: httpx.AsyncClient, method: str, url: str, resolved_ip: str | None, **kwargs) -> httpx.Response:
+    """Make an HTTP request pinned to the resolved IP to prevent DNS rebinding TOCTOU."""
+    if resolved_ip:
+        from urllib.parse import urlparse, urlunparse
+        parsed = urlparse(url)
+        # Replace hostname with resolved IP, set Host header to original hostname
+        pinned_url = urlunparse(parsed._replace(netloc=f"{resolved_ip}:{parsed.port}" if parsed.port else resolved_ip))
+        headers = dict(kwargs.pop("headers", {}) or {})
+        headers["Host"] = parsed.hostname
+        return await http_client.request(method, pinned_url, headers=headers, **kwargs)
+    return await http_client.request(method, url, **kwargs)
+
+
 async def _send_slack(config: dict, event_type: str, payload: dict, http_client: httpx.AsyncClient) -> tuple[bool, str | None]:
     """Send Slack notification via incoming webhook."""
     webhook_url = config.get("webhook_url")
     if not webhook_url:
         return False, "No webhook_url configured"
-    safe, reason = _is_safe_url(webhook_url)
+    safe, reason, resolved_ip = _is_safe_url(webhook_url)
     if not safe:
         return False, f"SSRF blocked: {reason}"
 
@@ -248,10 +264,10 @@ async def _send_slack(config: dict, event_type: str, payload: dict, http_client:
         }],
     }
 
-    resp = await http_client.post(webhook_url, json=slack_payload)
-        if resp.status_code == 200:
-            return True, None
-        return False, f"Slack returned {resp.status_code}: {resp.text[:200]}"
+    resp = await _pinned_request(http_client, "POST", webhook_url, resolved_ip, json=slack_payload)
+    if resp.status_code == 200:
+        return True, None
+    return False, f"Slack returned {resp.status_code}: {resp.text[:200]}"
 
 
 async def _send_discord(config: dict, event_type: str, payload: dict, http_client: httpx.AsyncClient) -> tuple[bool, str | None]:
@@ -259,7 +275,7 @@ async def _send_discord(config: dict, event_type: str, payload: dict, http_clien
     webhook_url = config.get("webhook_url")
     if not webhook_url:
         return False, "No webhook_url configured"
-    safe, reason = _is_safe_url(webhook_url)
+    safe, reason, resolved_ip = _is_safe_url(webhook_url)
     if not safe:
         return False, f"SSRF blocked: {reason}"
 
@@ -279,10 +295,10 @@ async def _send_discord(config: dict, event_type: str, payload: dict, http_clien
         }],
     }
 
-    resp = await http_client.post(webhook_url, json=discord_payload)
-        if resp.status_code in (200, 204):
-            return True, None
-        return False, f"Discord returned {resp.status_code}: {resp.text[:200]}"
+    resp = await _pinned_request(http_client, "POST", webhook_url, resolved_ip, json=discord_payload)
+    if resp.status_code in (200, 204):
+        return True, None
+    return False, f"Discord returned {resp.status_code}: {resp.text[:200]}"
 
 
 async def _send_telegram(config: dict, event_type: str, payload: dict, http_client: httpx.AsyncClient) -> tuple[bool, str | None]:
@@ -295,12 +311,12 @@ async def _send_telegram(config: dict, event_type: str, payload: dict, http_clie
     message = f"*🛡️ {_event_title(event_type)}*\n\n{_format_message(event_type, payload)}"
 
     resp = await http_client.post(
-            f"https://api.telegram.org/bot{bot_token}/sendMessage",
-            json={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"},
-        )
-        if resp.status_code == 200:
-            return True, None
-        return False, f"Telegram returned {resp.status_code}: {resp.text[:200]}"
+        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+        json={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"},
+    )
+    if resp.status_code == 200:
+        return True, None
+    return False, f"Telegram returned {resp.status_code}: {resp.text[:200]}"
 
 
 async def _send_webhook(config: dict, event_type: str, payload: dict, http_client: httpx.AsyncClient) -> tuple[bool, str | None]:
@@ -308,7 +324,7 @@ async def _send_webhook(config: dict, event_type: str, payload: dict, http_clien
     url = config.get("url")
     if not url:
         return False, "No url configured"
-    safe, reason = _is_safe_url(url)
+    safe, reason, resolved_ip = _is_safe_url(url)
     if not safe:
         return False, f"SSRF blocked: {reason}"
 
@@ -321,14 +337,10 @@ async def _send_webhook(config: dict, event_type: str, payload: dict, http_clien
         "payload": payload,
     }
 
-    if method == "POST":
-        resp = await http_client.post(url, json=webhook_body, headers=headers)
-    else:
-        resp = await http_client.request(method, url, json=webhook_body, headers=headers)
-
-        if 200 <= resp.status_code < 300:
-            return True, None
-        return False, f"Webhook returned {resp.status_code}"
+    resp = await _pinned_request(http_client, method, url, resolved_ip, json=webhook_body, headers=headers)
+    if 200 <= resp.status_code < 300:
+        return True, None
+    return False, f"Webhook returned {resp.status_code}"
 
 
 async def _send_email(config: dict, event_type: str, payload: dict) -> tuple[bool, str | None]:

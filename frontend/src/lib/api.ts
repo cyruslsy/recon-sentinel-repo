@@ -225,6 +225,14 @@ export const api = {
 
   pauseAgent: (agentRunId: string) =>
     request<unknown>(`/agents/${agentRunId}/pause`, { method: "POST" }),
+
+  // ─── Diff / History ─────────────────────────────────────
+  getDiff: (scanId: string) => request<unknown>(`/history/diff/${scanId}`),
+
+  getDiffItems: (diffId: string) => request<unknown[]>(`/history/diff/${diffId}/items`),
+
+  computeDiff: (scanId: string, prevScanId: string) =>
+    request<unknown>(`/history/diff/${scanId}/compute?prev_scan_id=${prevScanId}`, { method: "POST" }),
 };
 
 // SWR fetcher — returns unknown, caller must cast

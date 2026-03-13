@@ -21,9 +21,22 @@ router = APIRouter()
 
 @router.get("/", response_model=list[ReportResponse])
 async def list_reports(scan_id: UUID | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    q = select(Report).order_by(Report.generated_at.desc())
     if scan_id:
-        q = q.where(Report.scan_id == scan_id)
+        await authorize_scan(scan_id, user, db)
+        q = select(Report).where(Report.scan_id == scan_id).order_by(Report.generated_at.desc())
+    else:
+        # Scope to scans the user has access to via target→project→membership chain
+        from app.models.models import Scan, Target, ProjectMember
+        accessible_scans = (
+            select(Scan.id)
+            .join(Target, Scan.target_id == Target.id)
+            .join(ProjectMember, ProjectMember.project_id == Target.project_id)
+            .where(ProjectMember.user_id == user.id)
+        )
+        if user.role and user.role.value == "admin":
+            q = select(Report).order_by(Report.generated_at.desc())
+        else:
+            q = select(Report).where(Report.scan_id.in_(accessible_scans)).order_by(Report.generated_at.desc())
     result = await db.execute(q)
     return result.scalars().all()
 
@@ -57,7 +70,6 @@ async def get_report(report_id: UUID, user: User = Depends(get_current_user), db
 async def download_report(report_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Download the generated report file."""
     report = await authorize_report(report_id, user, db)
-        raise HTTPException(status_code=404, detail="Report not found")
     if report.file_path == "pending":
         raise HTTPException(status_code=202, detail="Report is still generating")
     return FileResponse(report.file_path, filename=f"recon-sentinel-report.{report.format.value}")

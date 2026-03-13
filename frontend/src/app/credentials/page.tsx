@@ -11,6 +11,7 @@ export default function CredentialsPage() {
   const scanId = searchParams?.get("scan_id") || "";
   const [creds, setCreds] = useState<CredentialLeak[]>([]);
   const [summary, setSummary] = useState<CredentialSummary | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => { if (scanId) loadCreds(); }, [scanId]);
 
@@ -18,8 +19,7 @@ export default function CredentialsPage() {
     try {
       setCreds(await api.listCredentials(scanId));
       setSummary(await api.credentialSummary(scanId));
-    setLoading(false);
-    } catch {}
+    } catch {} finally { setLoading(false); }
   }
 
   return (

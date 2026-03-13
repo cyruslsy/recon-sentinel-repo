@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
-import { api, getAccessToken } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { Scan } from "@/lib/types";
 
 interface DiffSummary {
@@ -63,23 +63,16 @@ export default function HistoryPage() {
     if (!selectedScan) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/history/diff/${selectedScan}`, {
-        headers: { Authorization: `Bearer ${getAccessToken()}` },
-      });
-      if (res.ok) {
-        const d = await res.json();
-        if (d) {
-          setDiff(d);
-          setPrevScan(d.prev_scan_id);
-          // Load diff items
-          const itemsRes = await fetch(`/api/v1/history/diff/${d.id}/items`, {
-            headers: { Authorization: `Bearer ${getAccessToken()}` },
-          });
-          if (itemsRes.ok) setItems(await itemsRes.json());
-        } else {
-          setDiff(null);
-          setItems([]);
-        }
+      const d = await api.getDiff(selectedScan) as DiffSummary | null;
+      if (d) {
+        setDiff(d);
+        setPrevScan(d.prev_scan_id);
+        // Load diff items
+        const diffItems = await api.getDiffItems(d.id) as DiffItem[];
+        setItems(diffItems);
+      } else {
+        setDiff(null);
+        setItems([]);
       }
     } catch {}
     setLoading(false);
@@ -89,10 +82,7 @@ export default function HistoryPage() {
     if (!selectedScan || !prevScan) return;
     setComputing(true);
     try {
-      await fetch(`/api/v1/history/diff/${selectedScan}/compute?prev_scan_id=${prevScan}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${getAccessToken()}` },
-      });
+      await api.computeDiff(selectedScan, prevScan);
       // Poll for completion
       setTimeout(loadDiff, 3000);
     } catch {}

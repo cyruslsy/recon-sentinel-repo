@@ -11,19 +11,19 @@ export default function ScopePage() {
   const [violations, setViolations] = useState<ScopeViolation[]>([]);
   const [newItem, setNewItem] = useState({ item_type: "domain", item_value: "", status: "in_scope" });
   const [tab, setTab] = useState<"scope" | "violations">("scope");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => { loadProject(); }, []);
 
   async function loadProject() {
     try {
-      const projects = await fetcher("/projects");
+      const projects = await api.listProjects();
       if (projects.length > 0) {
         setProjectId(projects[0].id);
         loadScope(projects[0].id);
         loadViolations(projects[0].id);
       }
-    setLoading(false);
-    } catch {}
+    } catch {} finally { setLoading(false); }
   }
 
   async function loadScope(pid: string) {

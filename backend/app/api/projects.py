@@ -38,19 +38,12 @@ async def create_project(org_id: UUID, data: ProjectCreate, user: User = Depends
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(project_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    await authorize_project(project_id, user, db)
-    project = await db.get(Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
+    return await authorize_project(project_id, user, db)
 
 
 @router.delete("/{project_id}", status_code=204)
 async def delete_project(project_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    await authorize_project(project_id, user, db)
-    project = await db.get(Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = await authorize_project(project_id, user, db)
     await db.delete(project)
     await db.commit()
 

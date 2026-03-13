@@ -10,6 +10,7 @@ export default function SettingsPage() {
   const [apiKeys, setApiKeys] = useState<ApiKeyConfig[]>([]);
   const [llmUsage, setLlmUsage] = useState<LlmUsageSummary[]>([]);
   const [newKey, setNewKey] = useState({ service_name: "", api_key: "" });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => { loadData(); }, [tab]);
 
@@ -17,8 +18,7 @@ export default function SettingsPage() {
     try {
       if (tab === "api-keys") setApiKeys(await api.listApiKeys());
       if (tab === "llm") setLlmUsage(await api.llmUsage());
-    setLoading(false);
-    } catch {}
+    } catch {} finally { setLoading(false); }
   }
 
   async function addKey(e: React.FormEvent) {

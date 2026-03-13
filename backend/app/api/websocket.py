@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi.exceptions import HTTPException
 from jose import JWTError, jwt
 
 from app.core.config import get_settings
@@ -76,10 +77,15 @@ async def scan_websocket(websocket: WebSocket, scan_id: str, token: str | None =
         import uuid
         async with AsyncSessionLocal() as db:
             user = await db.get(User, uuid.UUID(user_id))
-            if user:
-                await authorize_scan(uuid.UUID(scan_id), user, db)
-    except Exception:
+            if not user:
+                await websocket.close(code=4001, reason="User not found")
+                return
+            await authorize_scan(uuid.UUID(scan_id), user, db)
+    except HTTPException:
         await websocket.close(code=4003, reason="Access denied to this scan")
+        return
+    except Exception as e:
+        await websocket.close(code=4011, reason="Authorization check failed — please retry")
         return
 
     await manager.connect(websocket, scan_id)
@@ -157,6 +163,33 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
         if not user_id:
             await websocket.close(code=4001, reason="Invalid token")
             return
+        # Must be an access token, not a refresh token
+        if payload.get("type") != "access":
+            await websocket.close(code=4001, reason="Invalid token type")
+            return
+        # Check JTI blacklist (revoked tokens)
+        jti = payload.get("jti")
+        if jti:
+            try:
+                from app.core.redis import get_redis
+                r = await get_redis()
+                if await r.get(f"blacklist:{jti}"):
+                    await websocket.close(code=4001, reason="Token revoked")
+                    return
+            except Exception:
+                pass  # If Redis is down, allow through (fail-open for chat)
+        # Verify user exists and is active
+        from app.core.database import AsyncSessionLocal
+        from app.models.models import User
+        import uuid as _uuid
+        async with AsyncSessionLocal() as db:
+            user = await db.get(User, _uuid.UUID(user_id))
+            if not user or not user.is_active:
+                await websocket.close(code=4001, reason="User inactive or not found")
+                return
+    except JWTError:
+        await websocket.close(code=4001, reason="Authentication failed")
+        return
     except Exception:
         await websocket.close(code=4001, reason="Authentication failed")
         return
