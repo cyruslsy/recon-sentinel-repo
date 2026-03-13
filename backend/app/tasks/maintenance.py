@@ -75,7 +75,6 @@ async def _recover_stuck_scans():
     from datetime import timedelta
     from sqlalchemy import select, update
     from app.core.database import AsyncSessionLocal
-    from app.core.tz import utc_now
     from app.models.models import Scan
     from app.models.enums import ScanStatus
 

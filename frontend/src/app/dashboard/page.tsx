@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-  const [loading, setLoading] = useState(true);
 import useSWR from "swr";
 import AppLayout from "@/components/AppLayout";
 import { api, fetcher } from "@/lib/api";

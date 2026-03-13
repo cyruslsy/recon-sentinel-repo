@@ -24,15 +24,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.tz import utc_now
 from app.core.database import get_db
-from app.core.tz import utc_now
 from app.core.redis import (
-from app.core.tz import utc_now
     blacklist_token, is_token_blacklisted,
     get_user_revoked_at,
     check_api_key_rate_limit, reset_api_key_rate_limit,
 )
 from app.models.models import User
-from app.core.tz import utc_now
 
 settings = get_settings()
 

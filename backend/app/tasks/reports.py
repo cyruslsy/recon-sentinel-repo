@@ -13,13 +13,9 @@ from sqlalchemy import select, func
 from app.core.celery_app import celery_app
 from app.core.tz import utc_now
 from app.core.database import AsyncSessionLocal
-from app.core.tz import utc_now
 from app.core.llm import llm_call, LLMUnavailableError
-from app.core.tz import utc_now
 from app.models.models import Report, Scan, Finding, Target
-from app.core.tz import utc_now
 from app.models.enums import FindingSeverity, ReportFormat
-from app.core.tz import utc_now
 
 logger = logging.getLogger(__name__)
 

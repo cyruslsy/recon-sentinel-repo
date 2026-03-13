@@ -250,7 +250,7 @@ class DNSWildcardDetector:
         ratio = count / len(resolved_ips)
         if ratio > 0.90:
             return CorrectionResult(
-                detected=True, pattern="dns_wildcard",
+                detected=True, corrected=False, original_params={}, pattern="dns_wildcard",
                 detail=f"{ratio:.0%} of subdomains resolve to {most_common_ip}. Wildcard DNS.",
                 corrected_params={"wildcard_ip": most_common_ip, "filter_ip": most_common_ip},
             )
@@ -270,7 +270,7 @@ class TimeoutCascadeDetector:
         ratio = timeouts / len(responses)
         if ratio > 0.50:
             return CorrectionResult(
-                detected=True, pattern="timeout_cascade",
+                detected=True, corrected=False, original_params={}, pattern="timeout_cascade",
                 detail=f"{ratio:.0%} requests timed out. Reducing concurrency.",
                 corrected_params={"reduce_concurrency": True, "timeout_multiplier": 3},
             )
@@ -290,7 +290,7 @@ class ConnectionResetDetector:
         ratio = resets / len(responses)
         if ratio > 0.40:
             return CorrectionResult(
-                detected=True, pattern="connection_reset",
+                detected=True, corrected=False, original_params={}, pattern="connection_reset",
                 detail=f"{ratio:.0%} connections reset. Adding inter-request delay.",
                 corrected_params={"delay_seconds": 2.0, "max_threads": 1},
             )
@@ -310,7 +310,7 @@ class EmptyResponseDetector:
         ratio = empty / len(responses)
         if ratio > 0.80:
             return CorrectionResult(
-                detected=True, pattern="empty_response",
+                detected=True, corrected=False, original_params={}, pattern="empty_response",
                 detail=f"{ratio:.0%} of 200 responses have empty body. Possible honeypot.",
                 corrected_params={"reduce_depth": True, "flag_suspicious": True},
             )
@@ -331,7 +331,7 @@ class CertErrorDetector:
         ratio = cert_errors / len(responses)
         if ratio > 0.50:
             return CorrectionResult(
-                detected=True, pattern="cert_error",
+                detected=True, corrected=False, original_params={}, pattern="cert_error",
                 detail=f"{ratio:.0%} cert errors. Retrying with verification disabled.",
                 corrected_params={"verify_ssl": False},
             )
@@ -351,7 +351,7 @@ class EncodingMismatchDetector:
         ratio = errors / len(responses)
         if ratio > 0.30:
             return CorrectionResult(
-                detected=True, pattern="encoding_mismatch",
+                detected=True, corrected=False, original_params={}, pattern="encoding_mismatch",
                 detail=f"{ratio:.0%} encoding errors. Forcing UTF-8.",
                 corrected_params={"force_encoding": "utf-8", "errors": "replace"},
             )

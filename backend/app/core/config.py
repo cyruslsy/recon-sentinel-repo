@@ -86,3 +86,11 @@ def get_settings() -> Settings:
         LLM_MAX_REPLAN_COST_USD=float(os.environ.get("LLM_MAX_REPLAN_COST_USD", "0.50")),
         LLM_MAX_REPLAN_ITERATIONS=int(os.environ.get("LLM_MAX_REPLAN_ITERATIONS", "3")),
     )
+
+    # Reject known weak JWT secrets in non-development environments
+    WEAK_SECRETS = {"CHANGE-ME-IN-PRODUCTION", "secret", "changeme", "test", ""}
+    if settings.JWT_SECRET_KEY in WEAK_SECRETS and settings.APP_ENV != "development":
+        raise RuntimeError(
+            f"FATAL: JWT_SECRET_KEY is set to a known weak value ('{settings.JWT_SECRET_KEY[:10]}...'). "
+            "Set a strong secret via Docker secret (secrets/jwt_secret) or JWT_SECRET_KEY env var."
+        )

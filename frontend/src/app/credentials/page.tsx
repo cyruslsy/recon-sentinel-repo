@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-  const [loading, setLoading] = useState(true);
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";

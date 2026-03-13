@@ -14,9 +14,7 @@ from datetime import datetime
 from app.agents.base import BaseAgent
 from app.core.tz import utc_now
 from app.core.celery_app import celery_app
-from app.core.tz import utc_now
 from app.models.enums import FindingSeverity, FindingType, ScanPhase
-from app.core.tz import utc_now
 
 logger = logging.getLogger(__name__)
 

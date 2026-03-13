@@ -18,11 +18,8 @@ from app.core.tz import utc_now
     get_current_user, hash_password, revoke_token, verify_password,
 )
 from app.core.database import get_db
-from app.core.tz import utc_now
 from app.core.redis import blacklist_all_user_tokens
-from app.core.tz import utc_now
 from app.models.models import User
-from app.core.tz import utc_now
 
 router = APIRouter()
 

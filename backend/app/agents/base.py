@@ -24,13 +24,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import AsyncSessionLocal
 from app.core.tz import utc_now
 from app.core.redis import publish_scan_event
-from app.core.tz import utc_now
 from app.models.models import (
-from app.core.tz import utc_now
     AgentRun, Finding, HealthEvent, ScopeViolation,
 )
 from app.models.enums import (
-from app.core.tz import utc_now
     AgentStatus, FindingSeverity, FindingType, HealthEventType, ScanPhase,
 )
 

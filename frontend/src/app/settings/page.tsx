@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-  const [loading, setLoading] = useState(true);
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
 import type { ApiKeyConfig, LlmUsageSummary } from "@/lib/types";

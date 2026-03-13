@@ -235,6 +235,21 @@ class WebReconAgent(BaseAgent):
         sensitive = {"x-debug", "x-debug-token", "x-aspnet-version", "x-powered-by", "server-timing"}
         return any(h.lower() in sensitive for h in headers)
 
+    async def self_correct(self, error_context: dict) -> bool:
+        """Run anomaly detectors against probe results for timeout/cert/reset detection."""
+        from app.agents.corrections import detect_anomalies
+        responses = error_context.get("responses", [])
+        anomalies = detect_anomalies(responses)
+        if anomalies:
+            for a in anomalies:
+                if a.pattern == "timeout_cascade":
+                    logger.info("Web recon: timeout cascade detected — reducing concurrency")
+                    return True
+                if a.pattern == "cert_error":
+                    logger.info("Web recon: cert error — will retry with verify=False")
+                    return True
+        return False
+
 
 # ─── Celery Task ──────────────────────────────────────────────
 

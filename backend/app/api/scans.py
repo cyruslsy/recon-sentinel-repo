@@ -10,13 +10,9 @@ from app.core.database import get_db
 from app.core.tz import utc_now
 from app.core.auth import get_current_user
 from app.core.authorization import authorize_scan
-from app.core.tz import utc_now
 from app.models.models import User, Scan, ApprovalGate, Target
-from app.core.tz import utc_now
 from app.models.enums import ScanStatus, ApprovalDecision
-from app.core.tz import utc_now
 from app.schemas.schemas import (
-from app.core.tz import utc_now
     ScanCreate, ScanResponse, ScanBrief,
     ApprovalGateResponse, ApprovalGateDecision,
 )
@@ -34,10 +30,13 @@ async def list_scans(
     include_archived: bool = False,
     limit: int = Query(20, le=100),
     offset: int = 0,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List scans with optional filtering."""
+    """List scans visible to the current user."""
     q = select(Scan).order_by(Scan.created_at.desc()).limit(limit).offset(offset)
+    # Filter to scans the user owns or has project membership for
+    q = q.where(Scan.created_by == user.id)
     if target_id:
         q = q.where(Scan.target_id == target_id)
     if status:
@@ -122,15 +121,21 @@ async def resume_scan(scan_id: UUID, user: User = Depends(get_current_user), db:
     if scan.status not in (ScanStatus.PAUSED, ScanStatus.ERROR):
         raise HTTPException(status_code=400, detail=f"Cannot resume scan with status '{scan.status.value}'")
 
-    # Verify checkpoint exists
     if not scan.langgraph_checkpoint:
         raise HTTPException(status_code=400, detail="No checkpoint found — scan cannot be resumed")
 
-    scan.status = ScanStatus.RUNNING
-    scan.error_message = None
+    # Atomic status transition: use UPDATE ... WHERE to prevent double resume race
+    from sqlalchemy import update
+    result = await db.execute(
+        update(Scan)
+        .where(Scan.id == scan_id, Scan.status.in_([ScanStatus.PAUSED, ScanStatus.ERROR]))
+        .values(status=ScanStatus.RUNNING, error_message=None)
+    )
     await db.commit()
 
-    # Dispatch orchestrator resume via Celery
+    if result.rowcount == 0:
+        raise HTTPException(status_code=409, detail="Scan already resumed by another request")
+
     from app.tasks.orchestrator import resume_scan_from_checkpoint
     resume_scan_from_checkpoint.delay(str(scan_id))
 
@@ -139,9 +144,7 @@ async def resume_scan(scan_id: UUID, user: User = Depends(get_current_user), db:
 
 @router.post("/{scan_id}/archive")
 async def archive_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    scan = await db.get(Scan, scan_id)
-    if not scan:
-        raise HTTPException(status_code=404, detail="Scan not found")
+    scan = await authorize_scan(scan_id, user, db)
     scan.is_archived = True
     await db.commit()
     return {"status": "archived"}
@@ -149,9 +152,7 @@ async def archive_scan(scan_id: UUID, user: User = Depends(get_current_user), db
 
 @router.delete("/{scan_id}", status_code=204)
 async def delete_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    scan = await db.get(Scan, scan_id)
-    if not scan:
-        raise HTTPException(status_code=404, detail="Scan not found")
+    scan = await authorize_scan(scan_id, user, db)
     await db.delete(scan)
     await db.commit()
 

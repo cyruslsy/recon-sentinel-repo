@@ -127,11 +127,23 @@ async def scan_websocket(websocket: WebSocket, scan_id: str, token: str | None =
 async def chat_websocket(websocket: WebSocket, session_id: str):
     """
     WebSocket for AI Copilot Chat streaming.
-    
-    Client sends: {"content": "user message", "slash_command": "/findings critical"}
-    Server streams: {"event": "chat.token", "data": {"token": "The", "done": false}}
-    Server finishes: {"event": "chat.complete", "data": {"message_id": "...", "cost_usd": 0.03}}
+    Requires JWT token via ?token= query parameter.
     """
+    # Authenticate via token query param (same as scan WebSocket)
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4001, reason="Missing token")
+        return
+    try:
+        from app.core.auth import verify_access_token
+        user = await verify_access_token(token)
+        if not user:
+            await websocket.close(code=4001, reason="Invalid token")
+            return
+    except Exception:
+        await websocket.close(code=4001, reason="Authentication failed")
+        return
+
     await websocket.accept()
     
     try:

@@ -16,15 +16,10 @@ from decimal import Decimal
 from app.core.celery_app import celery_app
 from app.core.tz import utc_now
 from app.core.database import AsyncSessionLocal
-from app.core.tz import utc_now
 from app.core.llm import llm_call, parse_llm_json, LLMUnavailableError
-from app.core.tz import utc_now
 from app.core.redis import publish_scan_event
-from app.core.tz import utc_now
 from app.models.models import Scan, ApprovalGate
-from app.core.tz import utc_now
 from app.models.enums import ScanPhase, ScanStatus, ApprovalDecision
-from app.core.tz import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -289,11 +284,23 @@ class ScanOrchestrator:
         ]
 
         # Apply re-plan modifications (may have added/skipped agents)
+        ALLOWED_AGENT_TYPES = frozenset({
+            "subdomain", "osint", "email_sec", "threat_intel", "cred_leak",
+            "port_scan", "web_recon", "ssl_tls", "dir_file", "cloud",
+            "js_analysis", "vuln", "subdomain_takeover", "wayback", "waf",
+            "github_dork",
+        })
+
         for decision in self.state.replan_decisions:
             action = decision.get("action", "")
             agent_type = decision.get("agent_type", "")
             if action == "ADD_AGENT" and agent_type:
-                agents.append(f"app.agents.{agent_type}.run_{agent_type}_agent")
+                if agent_type not in ALLOWED_AGENT_TYPES:
+                    logger.warning(f"Replan requested unknown agent '{agent_type}' — blocked by allowlist")
+                    continue
+                task_name = f"app.agents.{agent_type}.run_{agent_type}_agent"
+                if task_name not in agents:
+                    agents.append(task_name)
             elif action == "SKIP_AGENT" and "vuln" in agent_type:
                 agents = [a for a in agents if agent_type not in a]
 

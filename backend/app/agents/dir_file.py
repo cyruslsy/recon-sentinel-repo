@@ -176,21 +176,9 @@ class DirFileAgent(BaseAgent):
     # ─── Anomaly Detection ────────────────────────────────────
 
     def _check_for_anomalies(self, results: list[dict]) -> list[CorrectionResult]:
-        corrections = []
-
-        c404 = Custom404Detector.detect(results)
-        if c404:
-            corrections.append(c404)
-
-        waf = WAFDetector.detect(results)
-        if waf:
-            corrections.append(waf)
-
-        rl = RateLimitDetector.detect(results)
-        if rl:
-            corrections.append(rl)
-
-        return corrections
+        """Run all 11 self-correction detectors against ffuf results."""
+        from app.agents.corrections import detect_anomalies
+        return detect_anomalies(results)
 
     # ─── Classification ───────────────────────────────────────
 

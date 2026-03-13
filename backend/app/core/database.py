@@ -72,18 +72,21 @@ async def get_db(request: Request = None) -> AsyncSession:
     FastAPI dependency for database sessions.
     Automatically sets RLS context (app.current_user_id) if the request
     has been authenticated by RLSMiddleware.
+    Uses begin() to ensure SET LOCAL persists within the transaction.
     """
     async with AsyncSessionLocal() as session:
-        try:
-            # Set RLS context if user is authenticated
-            if request and hasattr(request, "state") and hasattr(request.state, "rls_user_id"):
-                await session.execute(
-                    text("SET LOCAL app.current_user_id = :uid"),
-                    {"uid": request.state.rls_user_id},
-                )
-            yield session
-        finally:
-            await session.close()
+        async with session.begin():
+            try:
+                # Set RLS context if user is authenticated
+                if request and hasattr(request, "state") and hasattr(request.state, "rls_user_id"):
+                    await session.execute(
+                        text("SET LOCAL app.current_user_id = :uid"),
+                        {"uid": request.state.rls_user_id},
+                    )
+                yield session
+            except Exception:
+                await session.rollback()
+                raise
 
 
 async def get_db_with_rls(user_id: str) -> AsyncSession:

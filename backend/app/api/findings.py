@@ -109,10 +109,19 @@ async def update_finding(finding_id: UUID, data: FindingUpdate, user: User = Dep
 @router.post("/bulk", response_model=dict)
 async def bulk_action(data: FindingBulkAction, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """P1: Bulk actions on multiple findings."""
+    logger.info(f"Bulk action '{data.action}' on {len(data.finding_ids)} findings by user {user.id}")
     findings = []
+    authorized_scans = set()  # Cache scan auth checks
     for fid in data.finding_ids:
         f = await db.get(Finding, fid)
         if f:
+            # Verify user has access to this finding's scan
+            if f.scan_id not in authorized_scans:
+                try:
+                    await authorize_scan(f.scan_id, user, db)
+                    authorized_scans.add(f.scan_id)
+                except HTTPException:
+                    continue  # Skip findings the user can't access
             findings.append(f)
     
     if not findings:

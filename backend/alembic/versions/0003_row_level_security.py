@@ -113,6 +113,8 @@ def upgrade() -> None:
     """)
     op.execute("GRANT ALL ON ALL TABLES IN SCHEMA public TO sentinel_worker;")
     op.execute("ALTER ROLE sentinel_worker BYPASSRLS;")
+    # Grant worker role to the sentinel user so Celery workers can bypass RLS
+    op.execute("GRANT sentinel_worker TO sentinel;")
 
 
 def downgrade() -> None:

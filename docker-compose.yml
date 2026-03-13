@@ -32,13 +32,12 @@ services:
     image: redis:7-alpine
     container_name: sentinel-redis
     restart: unless-stopped
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
-    ports:
-      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass sentinel-redis-secret
+    # Port NOT exposed to host — internal network only
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "sentinel-redis-secret", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -182,7 +181,7 @@ services:
     image: mher/flower:2.0
     container_name: sentinel-flower
     restart: unless-stopped
-    command: celery flower --broker=redis://redis:6379/1 --port=5555 --basic_auth=admin:sentinel
+    command: celery flower --broker=redis://:sentinel-redis-secret@redis:6379/1 --port=5555 --basic_auth=${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-changeme}
     environment:
       CELERY_BROKER_URL: redis://redis:6379/1
     ports:

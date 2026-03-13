@@ -19,9 +19,7 @@ from sqlalchemy import func, select
 from app.core.config import get_settings
 from app.core.tz import utc_now
 from app.core.database import AsyncSessionLocal
-from app.core.tz import utc_now
 from app.models.models import LlmUsageLog
-from app.core.tz import utc_now
 
 try:
     import litellm

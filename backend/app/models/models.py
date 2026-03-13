@@ -24,7 +24,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base, TimestampMixin
 from app.core.tz import utc_now
 from app.models.enums import (
-from app.core.tz import utc_now
     AgentStatus, ApprovalDecision, FindingSeverity, FindingType, HealthEventType,
     InputType, NotificationChannel, NotificationEvent, ReportFormat,
     ReportTemplate, ScanPhase, ScanProfile, ScanStatus, ScopeItemType,
