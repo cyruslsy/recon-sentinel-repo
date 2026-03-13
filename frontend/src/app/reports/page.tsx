@@ -56,10 +56,26 @@ export default function ReportsPage() {
         format: "json",
         sections: enabledSections,
       });
-      setTimeout(async () => {
-        setReports(await api.listReports());
-      }, 3000);
-    } catch {} finally { setGenerating(false); }
+      // Poll for report completion (LLM takes 15-30s)
+      let attempts = 0;
+      const maxAttempts = 12;
+      const poll = async () => {
+        attempts++;
+        const updated = await api.listReports();
+        setReports(updated);
+        const latest = updated[0];
+        if (latest && latest.file_path !== "pending") {
+          setGenerating(false);
+          return;
+        }
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 5000);
+        } else {
+          setGenerating(false);
+        }
+      };
+      setTimeout(poll, 3000);
+    } catch { setGenerating(false); }
   }
 
   return (

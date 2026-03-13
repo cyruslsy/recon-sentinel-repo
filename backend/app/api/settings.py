@@ -119,7 +119,14 @@ async def verify_api_key(key_id: UUID, user: User = Depends(get_current_user), d
 
 @router.get("/engines", response_model=list[ScanEngineResponse])
 async def list_engines(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ScanEngine).order_by(ScanEngine.is_default.desc(), ScanEngine.name))
+    # Show user's own engines + system defaults; admins see all
+    if user.role and user.role.value == "admin":
+        q = select(ScanEngine).order_by(ScanEngine.is_default.desc(), ScanEngine.name)
+    else:
+        q = select(ScanEngine).where(
+            (ScanEngine.created_by == user.id) | (ScanEngine.is_default == True)  # noqa: E712
+        ).order_by(ScanEngine.is_default.desc(), ScanEngine.name)
+    result = await db.execute(q)
     return result.scalars().all()
 
 

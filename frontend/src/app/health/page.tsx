@@ -17,13 +17,13 @@ const TAB_LABELS: Record<FilterTab, string> = {
   needs_action: "Needs Action",
 };
 
-const EVENT_ICONS: Record<string, { icon: string; color: string; bg: string }> = {
-  anomaly_detected:   { icon: "⚠", color: "text-sentinel-orange", bg: "bg-sentinel-orange/10" },
-  self_correcting:    { icon: "⟳", color: "text-sentinel-accent", bg: "bg-sentinel-accent/10" },
-  correction_success: { icon: "✓", color: "text-sentinel-green", bg: "bg-sentinel-green/10" },
-  correction_failed:  { icon: "✗", color: "text-sentinel-red", bg: "bg-sentinel-red/10" },
-  escalate_user:      { icon: "!", color: "text-sentinel-red", bg: "bg-sentinel-red/10" },
-  info:               { icon: "ℹ", color: "text-sentinel-muted", bg: "bg-sentinel-surface" },
+const EVENT_ICONS: Record<string, { icon: string; color: string; bg: string; label: string }> = {
+  anomaly_detected:   { icon: "⚠", color: "text-sentinel-orange", bg: "bg-sentinel-orange/10", label: "Warning" },
+  self_correcting:    { icon: "⟳", color: "text-sentinel-accent", bg: "bg-sentinel-accent/10", label: "Auto-fixing" },
+  correction_success: { icon: "✓", color: "text-sentinel-green", bg: "bg-sentinel-green/10", label: "Fixed" },
+  correction_failed:  { icon: "✗", color: "text-sentinel-red", bg: "bg-sentinel-red/10", label: "Failed" },
+  escalate_user:      { icon: "!", color: "text-sentinel-red", bg: "bg-sentinel-red/10", label: "Action needed" },
+  info:               { icon: "ℹ", color: "text-sentinel-muted", bg: "bg-sentinel-surface", label: "Info" },
 };
 
 export default function HealthFeedPage() {
@@ -132,8 +132,13 @@ export default function HealthFeedPage() {
               return (
                 <div key={event.id} className={`relative pl-14 pb-4 ${isConnected ? "pt-0" : "pt-2"}`}>
                   {/* Timeline dot */}
-                  <div className={`absolute left-4 w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${meta.bg} ${meta.color} border border-sentinel-border`}>
-                    {meta.icon}
+                  <div
+                    className={`absolute left-4 w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${meta.bg} ${meta.color} border border-sentinel-border`}
+                    aria-label={meta.label}
+                    role="img"
+                  >
+                    <span aria-hidden="true">{meta.icon}</span>
+                    <span className="sr-only">{meta.label}</span>
                   </div>
 
                   {/* Event card */}

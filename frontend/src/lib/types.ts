@@ -56,6 +56,7 @@ export interface AgentRun {
   duration_seconds: number | null;
   started_at: string | null;
   completed_at: string | null;
+  mitre_tags: string[];
 }
 
 // ─── Findings ────────────────────────────────────────────────

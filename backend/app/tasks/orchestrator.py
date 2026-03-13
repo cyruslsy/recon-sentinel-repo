@@ -23,6 +23,14 @@ from app.models.enums import ScanPhase, ScanStatus, ApprovalDecision
 
 logger = logging.getLogger(__name__)
 
+# Allowlist of valid agent types for re-plan decisions (Amendment #25)
+ALLOWED_AGENT_TYPES = frozenset({
+    "subdomain", "osint", "email_sec", "threat_intel", "cred_leak",
+    "port_scan", "web_recon", "ssl_tls", "dir_file", "cloud",
+    "js_analysis", "vuln", "subdomain_takeover", "wayback", "waf",
+    "github_dork",
+})
+
 
 # ═══════════════════════════════════════════════════════════════
 # RECON STATE
@@ -92,7 +100,15 @@ class ScanOrchestrator:
         # Global safety limits
         max_scan_duration_hours = 6
         max_total_findings = 10000
-        scan_start = utc_now()
+        # Use persisted started_at so resume doesn't reset the timeout clock
+        from datetime import datetime, timezone
+        if self.state.started_at:
+            scan_start = datetime.fromisoformat(self.state.started_at)
+            if scan_start.tzinfo is None:
+                scan_start = scan_start.replace(tzinfo=timezone.utc)
+        else:
+            scan_start = utc_now()
+            self.state.started_at = scan_start.isoformat()
 
         while self.state.current_phase != "done":
             # Check global timeout
@@ -284,13 +300,6 @@ class ScanOrchestrator:
         ]
 
         # Apply re-plan modifications (may have added/skipped agents)
-        ALLOWED_AGENT_TYPES = frozenset({
-            "subdomain", "osint", "email_sec", "threat_intel", "cred_leak",
-            "port_scan", "web_recon", "ssl_tls", "dir_file", "cloud",
-            "js_analysis", "vuln", "subdomain_takeover", "wayback", "waf",
-            "github_dork",
-        })
-
         for decision in self.state.replan_decisions:
             action = decision.get("action", "")
             agent_type = decision.get("agent_type", "")

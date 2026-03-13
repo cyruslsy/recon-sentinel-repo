@@ -32,6 +32,14 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
     status === "error" ? "text-sentinel-red" :
     "text-sentinel-muted";
 
+  const statusIcon =
+    status === "completed" ? "✓ " :
+    status === "running" ? "● " :
+    status === "self_correcting" ? "⟳ " :
+    status === "error" ? "✗ " :
+    status === "paused" ? "❚❚ " :
+    "";
+
   const barColor =
     status === "completed" ? "bg-sentinel-green" :
     status === "self_correcting" ? "bg-sentinel-orange" :
@@ -64,17 +72,11 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
           <h3 className="text-sm font-medium truncate">{agent.agent_name}</h3>
           {/* MITRE tag */}
           <span className="text-[9px] font-mono px-1.5 py-0.5 bg-sentinel-purple/10 text-sentinel-purple rounded">
-            {agent.agent_type === "subdomain" ? "T1593" :
-             agent.agent_type === "port_scan" ? "T1595" :
-             agent.agent_type === "vuln" ? "T1190" :
-             agent.agent_type === "cred_leak" ? "T1078" :
-             agent.agent_type === "wayback" ? "T1593" :
-             agent.agent_type === "waf" ? "T1592" :
-             "ATT&CK"}
+            {agent.mitre_tags?.[0] ?? "ATT&CK"}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-medium ${statusColor}`}>{status}</span>
+          <span className={`text-xs font-medium ${statusColor}`}>{statusIcon}{status}</span>
           <span className="text-[10px] text-sentinel-muted">{expanded ? "▲" : "▼"}</span>
         </div>
       </div>
@@ -149,11 +151,13 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
 
 function GateBanner({ gate, scanId, onDecided }: { gate: ApprovalGate; scanId: string; onDecided: () => void }) {
   const [deciding, setDeciding] = useState(false);
+  const [showCustomize, setShowCustomize] = useState(false);
+  const [modifications, setModifications] = useState("");
 
-  async function handleDecide(decision: string) {
+  async function handleDecide(decision: string, mods?: string) {
     setDeciding(true);
     try {
-      await api.decideGate(scanId, gate.gate_number, decision);
+      await api.decideGate(scanId, gate.gate_number, decision, mods ? { notes: mods } : undefined);
       onDecided();
     } catch {}
     setDeciding(false);
@@ -175,6 +179,37 @@ function GateBanner({ gate, scanId, onDecided }: { gate: ApprovalGate; scanId: s
             </p>
           )}
 
+          {/* Customization panel */}
+          {showCustomize && (
+            <div className="mt-4 p-3 bg-sentinel-surface border border-sentinel-border rounded-lg">
+              <label className="text-xs font-medium text-sentinel-muted block mb-2">
+                Scope modifications (agents to add/skip, targets to include/exclude):
+              </label>
+              <textarea
+                value={modifications}
+                onChange={(e) => setModifications(e.target.value)}
+                placeholder="e.g. Skip vuln scanning on staging.target.com&#10;Add cloud asset agent&#10;Exclude *.internal.target.com"
+                rows={3}
+                className="w-full bg-sentinel-bg border border-sentinel-border rounded px-3 py-2 text-sm text-sentinel-text placeholder:text-sentinel-muted/50 focus:outline-none focus:border-sentinel-accent"
+              />
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => handleDecide("customized", modifications)}
+                  disabled={deciding || !modifications.trim()}
+                  className="bg-sentinel-orange hover:bg-sentinel-orange/90 text-white text-xs px-3 py-1.5 rounded disabled:opacity-50"
+                >
+                  {deciding ? "Submitting..." : "Submit Modifications"}
+                </button>
+                <button
+                  onClick={() => { setShowCustomize(false); setModifications(""); }}
+                  className="text-xs text-sentinel-muted hover:text-sentinel-text px-3 py-1.5"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2 mt-4">
             <button
               onClick={() => handleDecide("approved")}
@@ -183,13 +218,15 @@ function GateBanner({ gate, scanId, onDecided }: { gate: ApprovalGate; scanId: s
             >
               Approve
             </button>
-            <button
-              onClick={() => handleDecide("customized")}
-              disabled={deciding}
-              className="bg-sentinel-orange hover:bg-sentinel-orange/90 text-white text-sm px-4 py-1.5 rounded disabled:opacity-50"
-            >
-              Customize
-            </button>
+            {!showCustomize && (
+              <button
+                onClick={() => setShowCustomize(true)}
+                disabled={deciding}
+                className="bg-sentinel-orange hover:bg-sentinel-orange/90 text-white text-sm px-4 py-1.5 rounded disabled:opacity-50"
+              >
+                Customize
+              </button>
+            )}
             <button
               onClick={() => handleDecide("skipped")}
               disabled={deciding}

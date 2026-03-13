@@ -150,7 +150,15 @@ export default function HistoryPage() {
             {diff.ai_diff_summary && (
               <div className="bg-sentinel-accent/10 border border-sentinel-accent/30 rounded-lg p-4 mb-6">
                 <p className="text-xs text-sentinel-accent font-medium mb-1">AI Diff Summary</p>
-                <p className="text-sm">{diff.ai_diff_summary}</p>
+                <div
+                  className="text-sm prose prose-invert prose-sm max-w-none [&>p]:mb-1"
+                  dangerouslySetInnerHTML={{
+                    __html: diff.ai_diff_summary
+                      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                      .replace(/\n- /g, "<br/>• ")
+                      .replace(/\n/g, "<br/>"),
+                  }}
+                />
               </div>
             )}
 

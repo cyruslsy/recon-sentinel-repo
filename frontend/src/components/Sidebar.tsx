@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useState, useEffect } from "react";
+import { api } from "@/lib/api";
 
 interface NavItem {
   href: string;
@@ -12,19 +13,39 @@ interface NavItem {
   badgeKey?: string;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: "◉" },
-  { href: "/scans", label: "Scans", icon: "⟐" },
-  { href: "/agents", label: "Agents", icon: "⚡" },
-  { href: "/health", label: "Health Feed", icon: "♡", badgeKey: "health" },
-  { href: "/findings", label: "Findings", icon: "🎯" },
-  { href: "/mitre", label: "MITRE ATT&CK", icon: "⬡" },
-  { href: "/credentials", label: "Credentials", icon: "🔑" },
-  { href: "/scope", label: "Scope", icon: "◎" },
-  { href: "/reports", label: "Reports", icon: "📄" },
-  { href: "/history", label: "Scan Diff", icon: "🔄" },
-  { href: "/chat", label: "AI Copilot", icon: "💬", badgeKey: "chat" },
-  { href: "/settings", label: "Settings", icon: "⚙" },
+const NAV_GROUPS = [
+  {
+    label: null,
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: "◉" },
+    ],
+  },
+  {
+    label: "Scanning",
+    items: [
+      { href: "/scans", label: "Scans", icon: "⟐" },
+      { href: "/agents", label: "Agents", icon: "⚡" },
+      { href: "/health", label: "Health Feed", icon: "♡", badgeKey: "health" },
+      { href: "/scope", label: "Scope", icon: "◎" },
+    ],
+  },
+  {
+    label: "Results",
+    items: [
+      { href: "/findings", label: "Findings", icon: "🎯" },
+      { href: "/mitre", label: "MITRE ATT&CK", icon: "⬡" },
+      { href: "/credentials", label: "Credentials", icon: "🔑" },
+      { href: "/reports", label: "Reports", icon: "📄" },
+      { href: "/history", label: "Scan Diff", icon: "🔄" },
+    ],
+  },
+  {
+    label: "Tools",
+    items: [
+      { href: "/chat", label: "AI Copilot", icon: "💬", badgeKey: "chat" },
+      { href: "/settings", label: "Settings", icon: "⚙" },
+    ],
+  },
 ];
 
 export default function Sidebar() {
@@ -34,10 +55,23 @@ export default function Sidebar() {
 
   // Poll for badge counts (lightweight — replace with WebSocket context in production)
   useEffect(() => {
-    const interval = setInterval(() => {
-      // This would be replaced by a WebSocket-driven context in production
-      // For now, read from a global state or skip
-    }, 10000);
+    async function fetchBadges() {
+      try {
+        const scans = await api.listScans("limit=10");
+        const running = scans.filter((s: { status: string }) => s.status === "running").length;
+        if (running > 0) {
+          setBadges(prev => ({ ...prev, health: running }));
+        } else {
+          setBadges(prev => {
+            const next = { ...prev };
+            delete next.health;
+            return next;
+          });
+        }
+      } catch {}
+    }
+    fetchBadges();
+    const interval = setInterval(fetchBadges, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -63,34 +97,43 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav aria-label="Main navigation" className="flex-1 py-2 overflow-y-auto">
-        {NAV_ITEMS.map((item) => {
-          const active = pathname?.startsWith(item.href);
-          const badge = item.badgeKey ? badges[item.badgeKey] : null;
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={gi} className={gi > 0 ? "mt-3" : ""}>
+            {group.label && (
+              <p className="text-[9px] uppercase tracking-wider text-sentinel-muted/60 px-6 py-1 font-semibold">
+                {group.label}
+              </p>
+            )}
+            {group.items.map((item) => {
+              const active = pathname?.startsWith(item.href);
+              const badge = item.badgeKey ? badges[item.badgeKey] : null;
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-4 py-2 mx-2 rounded-md text-sm transition-colors ${
-                active
-                  ? "bg-sentinel-accent/10 text-sentinel-accent"
-                  : "text-sentinel-muted hover:text-sentinel-text hover:bg-sentinel-hover"
-              }`}
-            >
-              <span className="text-base w-5 text-center">{item.icon}</span>
-              <span className="flex-1">{item.label}</span>
-              {badge !== null && badge !== undefined && badge !== 0 && (
-                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
-                  typeof badge === "string"
-                    ? "bg-sentinel-accent/20 text-sentinel-accent"
-                    : "bg-sentinel-red/20 text-sentinel-red"
-                }`}>
-                  {badge}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-4 py-2 mx-2 rounded-md text-sm transition-colors ${
+                    active
+                      ? "bg-sentinel-accent/10 text-sentinel-accent"
+                      : "text-sentinel-muted hover:text-sentinel-text hover:bg-sentinel-hover"
+                  }`}
+                >
+                  <span className="text-base w-5 text-center">{item.icon}</span>
+                  <span className="flex-1">{item.label}</span>
+                  {badge !== null && badge !== undefined && badge !== 0 && (
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                      typeof badge === "string"
+                        ? "bg-sentinel-accent/20 text-sentinel-accent"
+                        : "bg-sentinel-red/20 text-sentinel-red"
+                    }`}>
+                      {badge}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* User */}

@@ -14,6 +14,14 @@ const SEVERITY_BADGE: Record<string, string> = {
   info: "bg-gray-500/20 text-gray-400",
 };
 
+const SEVERITY_ICON: Record<string, string> = {
+  critical: "▲ ",
+  high: "◆ ",
+  medium: "● ",
+  low: "○ ",
+  info: "— ",
+};
+
 export default function FindingsPage() {
   const searchParams = useSearchParams();
   const scanId = searchParams?.get("scan_id") || "";
@@ -156,7 +164,7 @@ export default function FindingsPage() {
                   </td>
                   <td className="py-2.5 px-3">
                     <span className={`text-xs px-2 py-0.5 rounded font-medium ${SEVERITY_BADGE[f.severity] || ""}`}>
-                      {f.severity}
+                      {SEVERITY_ICON[f.severity] || ""}{f.severity}
                     </span>
                   </td>
                   <td className="py-2.5 px-3 text-xs text-sentinel-muted">{f.finding_type}</td>
