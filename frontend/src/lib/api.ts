@@ -7,7 +7,7 @@ import type {
   TokenResponse, User, Scan, AgentRun, Finding, ApprovalGate,
   Organization, Project, Target, ScopeItem, ScopeViolation,
   Report, ChatSession, ChatMessage, ApiKeyConfig, LlmUsageSummary,
-  CredentialLeak, CredentialSummary, MitreHeatmapItem,
+  CredentialLeak, CredentialSummary, MitreHeatmapItem, HealthEvent,
 } from "./types";
 
 const API_BASE = "/api/v1";
@@ -208,6 +208,23 @@ export const api = {
   // Health
   healthCheck: () =>
     fetch("/api/health", { credentials: "include" }).then((r) => r.json()) as Promise<{ status: string }>,
+
+  // ─── Health Events ──────────────────────────────────────
+  getHealthEvents: (scanId: string) => request<HealthEvent[]>(`/agents/health?scan_id=${scanId}`),
+
+  decideHealthEvent: (eventId: string, decision: string) =>
+    request<unknown>(`/agents/health/${eventId}/decide`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    }),
+
+  // ─── Agent Actions ──────────────────────────────────────
+  rerunAgent: (agentRunId: string) =>
+    request<unknown>(`/agents/${agentRunId}/rerun`, { method: "POST" }),
+
+  pauseAgent: (agentRunId: string) =>
+    request<unknown>(`/agents/${agentRunId}/pause`, { method: "POST" }),
 };
 
 // SWR fetcher — returns unknown, caller must cast

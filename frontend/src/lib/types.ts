@@ -225,3 +225,20 @@ export interface ScanEvent {
   event: string;
   data: Record<string, unknown>;
 }
+
+// ─── Health Events ──────────────────────────────────────────
+
+export interface HealthEvent {
+  id: string;
+  scan_id: string;
+  agent_run_id: string | null;
+  agent_type: string | null;
+  agent_name: string | null;
+  event_type: "anomaly_detected" | "self_correcting" | "correction_success" | "correction_failed" | "escalate_user" | "info";
+  detail: string;
+  corrected_params: Record<string, unknown> | null;
+  raw_data: Record<string, unknown> | null;
+  user_decision: string | null;
+  decided_at: string | null;
+  created_at: string;
+}

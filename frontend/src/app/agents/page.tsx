@@ -19,6 +19,8 @@ function ProgressBar({ pct, color = "bg-sentinel-accent" }: { pct: number; color
 }
 
 function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string, unknown> }) {
+  const [expanded, setExpanded] = useState(false);
+  const [rerunning, setRerunning] = useState(false);
   const data = wsData || agent;
   const pct = data.progress_pct || 0;
   const status = data.status || agent.status;
@@ -36,11 +38,45 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
     status === "error" ? "bg-sentinel-red" :
     "bg-sentinel-accent";
 
+  // Health note strip color
+  const healthStrip =
+    status === "self_correcting" ? "border-l-sentinel-orange" :
+    status === "error" ? "border-l-sentinel-red" :
+    status === "completed" ? "border-l-sentinel-green" :
+    "border-l-transparent";
+
+  const handleRerun = async () => {
+    setRerunning(true);
+    try {
+      await api.rerunAgent(agent.id);
+    } catch {} finally { setRerunning(false); }
+  };
+
   return (
-    <div className="bg-sentinel-card border border-sentinel-border rounded-lg p-4">
+    <button
+      onClick={() => setExpanded(!expanded)}
+      className={`w-full text-left bg-sentinel-card border border-sentinel-border border-l-2 ${healthStrip} rounded-lg p-4 hover:border-sentinel-accent/30 transition-colors`}
+      aria-expanded={expanded}
+      aria-label={`Agent: ${agent.agent_name}, status: ${status}`}
+    >
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-medium">{agent.agent_name}</h3>
-        <span className={`text-xs font-medium ${statusColor}`}>{status}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <h3 className="text-sm font-medium truncate">{agent.agent_name}</h3>
+          {/* MITRE tag */}
+          <span className="text-[9px] font-mono px-1.5 py-0.5 bg-sentinel-purple/10 text-sentinel-purple rounded">
+            {agent.agent_type === "subdomain" ? "T1593" :
+             agent.agent_type === "port_scan" ? "T1595" :
+             agent.agent_type === "vuln" ? "T1190" :
+             agent.agent_type === "cred_leak" ? "T1078" :
+             agent.agent_type === "wayback" ? "T1593" :
+             agent.agent_type === "waf" ? "T1592" :
+             "ATT&CK"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-medium ${statusColor}`}>{status}</span>
+          <span className="text-[10px] text-sentinel-muted">{expanded ? "▲" : "▼"}</span>
+        </div>
       </div>
 
       <ProgressBar pct={pct} color={barColor} />
@@ -51,15 +87,63 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
         </span>
         <span className="text-xs text-sentinel-muted">
           {data.findings_count || agent.findings_count || 0} findings
+          {agent.duration_seconds ? ` · ${Math.round(agent.duration_seconds)}s` : ""}
         </span>
       </div>
+
+      {/* Health note (self-correction status) */}
+      {status === "self_correcting" && (
+        <div className="mt-2 text-[11px] bg-sentinel-orange/5 border border-sentinel-orange/20 rounded px-2 py-1 text-sentinel-orange">
+          ⟳ Self-correcting: detecting anomaly pattern and adjusting parameters...
+        </div>
+      )}
 
       {data.last_log_line && (
         <p className="text-[11px] text-sentinel-muted mt-2 font-mono truncate">
           {data.last_log_line}
         </p>
       )}
-    </div>
+
+      {/* Expanded section: full log + actions */}
+      {expanded && (
+        <div className="mt-3 space-y-2" onClick={e => e.stopPropagation()}>
+          {/* Last command */}
+          {data.last_log_line && (
+            <div className="p-2 bg-sentinel-bg rounded border border-sentinel-border">
+              <p className="text-[10px] text-sentinel-muted mb-1">LAST COMMAND</p>
+              <p className="text-xs font-mono text-sentinel-text/80 break-all">{data.last_log_line}</p>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex gap-2 pt-1">
+            {(status === "error" || status === "completed") && (
+              <button
+                disabled={rerunning}
+                onClick={handleRerun}
+                className="text-[11px] font-medium px-3 py-1 rounded bg-sentinel-accent/10 text-sentinel-accent hover:bg-sentinel-accent/20 border border-sentinel-accent/30 transition-colors disabled:opacity-50"
+              >
+                {rerunning ? "Queuing..." : "⟳ Re-run"}
+              </button>
+            )}
+            {status === "running" && (
+              <button
+                onClick={async () => { try { await api.pauseAgent(agent.id); } catch {} }}
+                className="text-[11px] font-medium px-3 py-1 rounded bg-sentinel-orange/10 text-sentinel-orange hover:bg-sentinel-orange/20 border border-sentinel-orange/30 transition-colors"
+              >
+                ⏸ Pause
+              </button>
+            )}
+            <a
+              href={`/health?scan_id=${agent.scan_id}`}
+              className="text-[11px] font-medium px-3 py-1 rounded bg-sentinel-surface text-sentinel-muted hover:text-sentinel-text border border-sentinel-border transition-colors"
+            >
+              View Health Feed
+            </a>
+          </div>
+        </div>
+      )}
+    </button>
   );
 }
 
