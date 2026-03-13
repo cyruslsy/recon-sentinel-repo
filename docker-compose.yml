@@ -1,0 +1,220 @@
+# ═══════════════════════════════════════════════════════════════
+# Recon Sentinel — Docker Compose (Development)
+# 8 services: PostgreSQL, Redis, API, Celery Worker, Celery Beat,
+#              Nginx, Ollama (optional), DB Init (migration runner)
+# ═══════════════════════════════════════════════════════════════
+
+services:
+
+  # ─── PostgreSQL 16 ─────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: sentinel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: recon_sentinel
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d recon_sentinel"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─── Redis 7 ───────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sentinel-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─── DB Init (run migrations then exit) ────────────────────
+  db-init:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentinel-db-init
+    command: >
+      sh -c "
+        echo 'Waiting for PostgreSQL...' &&
+        while ! pg_isready -h postgres -U sentinel -d recon_sentinel; do sleep 1; done &&
+        echo 'Running migrations...' &&
+        cd /app && alembic upgrade head &&
+        echo 'Migrations complete.'
+      "
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sentinel:@postgres:5432/recon_sentinel
+      DB_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─── FastAPI (uvicorn) ─────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentinel-api
+    restart: unless-stopped
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --log-level info
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sentinel:@postgres:5432/recon_sentinel
+      REDIS_URL: redis://redis:6379/0
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+      APP_ENV: development
+    secrets:
+      - db_password
+      - jwt_secret
+      - anthropic_api_key
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - scan_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ─── Celery Worker (tools profile) ─────────────────────────
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentinel-worker
+    restart: unless-stopped
+    command: >
+      celery -A app.core.celery_app worker
+      --loglevel=info
+      --concurrency=4
+      --queues=default,subdomain,port_scan,web_recon,osint,threat_intel,cred_leak,email_sec,ssl_tls,waf,cloud,dir_file,vuln,historical,js_analysis
+      --hostname=worker-tools@%h
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sentinel:@postgres:5432/recon_sentinel
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+    secrets:
+      - db_password
+      - anthropic_api_key
+    volumes:
+      - ./backend:/app
+      - scan_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    # Security hardening (tools profile — Amendment #18)
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW  # Required for Nmap SYN scan
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=100M
+
+  # ─── Celery Beat (scheduler) ───────────────────────────────
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentinel-beat
+    restart: unless-stopped
+    command: >
+      celery -A app.core.celery_app beat
+      --loglevel=info
+      --schedule=/tmp/celerybeat-schedule
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+    depends_on:
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=10M
+
+  # ─── Nginx (reverse proxy) ────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: sentinel-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ─── Ollama (optional local LLM) ──────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sentinel-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    profiles:
+      - local-llm  # Only starts with: docker compose --profile local-llm up
+
+# ─── Secrets ──────────────────────────────────────────────────
+secrets:
+  db_password:
+    file: ./secrets/db_password
+  jwt_secret:
+    file: ./secrets/jwt_secret
+  anthropic_api_key:
+    file: ./secrets/anthropic_api_key
+
+# ─── Volumes ─────────────────────────────────────────────────
+volumes:
+  pgdata:
+  redisdata:
+  scan_data:
+  ollama_models:

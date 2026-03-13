@@ -1,0 +1,51 @@
+# Secrets — NEVER commit these
+secrets/
+*.key
+*.pem
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.next/
+out/
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.sql.bak
+alembic/versions/*.pyc
+
+# Scan data
+data/screenshots/
+data/reports/
+data/exports/
+
+# Logs
+*.log
+logs/

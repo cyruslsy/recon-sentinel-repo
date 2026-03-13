@@ -1,0 +1,178 @@
+"""Scan Routes — Launch, monitor, approve, and manage scan lifecycle"""
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.models.models import Scan, ApprovalGate, Target
+from app.models.enums import ScanStatus, ApprovalDecision
+from app.schemas.schemas import (
+    ScanCreate, ScanResponse, ScanBrief,
+    ApprovalGateResponse, ApprovalGateDecision,
+)
+
+router = APIRouter()
+
+
+@router.get("/", response_model=list[ScanBrief])
+async def list_scans(
+    target_id: UUID | None = None,
+    status: ScanStatus | None = None,
+    include_archived: bool = False,
+    limit: int = Query(20, le=100),
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+):
+    """List scans with optional filtering."""
+    q = select(Scan).order_by(Scan.created_at.desc()).limit(limit).offset(offset)
+    if target_id:
+        q = q.where(Scan.target_id == target_id)
+    if status:
+        q = q.where(Scan.status == status)
+    if not include_archived:
+        q = q.where(Scan.is_archived == False)  # noqa: E712
+    result = await db.execute(q)
+    return result.scalars().all()
+
+
+@router.post("/", response_model=ScanResponse, status_code=201)
+async def launch_scan(data: ScanCreate, db: AsyncSession = Depends(get_db)):
+    """Launch a new scan. The orchestrator begins the passive phase immediately."""
+    # Get target to resolve project_id
+    target = await db.get(Target, data.target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Target not found")
+
+    scan = Scan(
+        **data.model_dump(),
+        status=ScanStatus.RUNNING,
+        created_by="00000000-0000-0000-0000-000000000000",  # TODO: from auth
+    )
+    db.add(scan)
+    await db.commit()
+    await db.refresh(scan)
+
+    # Dispatch to Celery orchestrator
+    from app.tasks.orchestrator import start_scan
+    start_scan.delay(str(scan.id), target.target_value, str(target.project_id), scan.profile.value)
+
+    return scan
+
+
+@router.get("/{scan_id}", response_model=ScanResponse)
+async def get_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+    scan = await db.get(Scan, scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    return scan
+
+
+@router.post("/{scan_id}/stop")
+async def stop_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Stop a running scan. All active agents are cancelled."""
+    scan = await db.get(Scan, scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    if scan.status != ScanStatus.RUNNING:
+        raise HTTPException(status_code=400, detail="Scan is not running")
+    scan.status = ScanStatus.CANCELLED
+    await db.commit()
+    # TODO: Celery revoke all running agent tasks
+    return {"status": "scan_stopped", "scan_id": str(scan_id)}
+
+
+@router.post("/{scan_id}/pause")
+async def pause_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Pause scan at current phase. Can be resumed later."""
+    scan = await db.get(Scan, scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    scan.status = ScanStatus.PAUSED
+    await db.commit()
+    return {"status": "scan_paused", "scan_id": str(scan_id)}
+
+
+@router.post("/{scan_id}/resume")
+async def resume_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+    """Resume a paused scan from its LangGraph checkpoint."""
+    scan = await db.get(Scan, scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    if scan.status != ScanStatus.PAUSED:
+        raise HTTPException(status_code=400, detail="Scan is not paused")
+    scan.status = ScanStatus.RUNNING
+    await db.commit()
+    # TODO: Celery resume from checkpoint
+    return {"status": "scan_resumed", "scan_id": str(scan_id)}
+
+
+@router.post("/{scan_id}/archive")
+async def archive_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+    scan = await db.get(Scan, scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    scan.is_archived = True
+    await db.commit()
+    return {"status": "archived"}
+
+
+@router.delete("/{scan_id}", status_code=204)
+async def delete_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+    scan = await db.get(Scan, scan_id)
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan not found")
+    await db.delete(scan)
+    await db.commit()
+
+
+# ─── Approval Gates ──────────────────────────────────────────────────
+
+@router.get("/{scan_id}/gates", response_model=list[ApprovalGateResponse])
+async def list_gates(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ApprovalGate).where(ApprovalGate.scan_id == scan_id).order_by(ApprovalGate.gate_number)
+    )
+    return result.scalars().all()
+
+
+@router.get("/{scan_id}/gates/{gate_number}", response_model=ApprovalGateResponse)
+async def get_gate(scan_id: UUID, gate_number: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(ApprovalGate).where(ApprovalGate.scan_id == scan_id, ApprovalGate.gate_number == gate_number)
+    )
+    gate = result.scalar_one_or_none()
+    if not gate:
+        raise HTTPException(status_code=404, detail="Approval gate not found")
+    return gate
+
+
+@router.post("/{scan_id}/gates/{gate_number}/decide", response_model=ApprovalGateResponse)
+async def decide_gate(
+    scan_id: UUID, gate_number: int, data: ApprovalGateDecision, db: AsyncSession = Depends(get_db)
+):
+    """Submit human decision at an approval gate. Resumes the scan pipeline."""
+    result = await db.execute(
+        select(ApprovalGate).where(ApprovalGate.scan_id == scan_id, ApprovalGate.gate_number == gate_number)
+    )
+    gate = result.scalar_one_or_none()
+    if not gate:
+        raise HTTPException(status_code=404, detail="Approval gate not found")
+    if gate.decision != ApprovalDecision.PENDING:
+        raise HTTPException(status_code=400, detail="Gate already decided")
+
+    gate.decision = data.decision
+    gate.user_modifications = data.user_modifications
+    from datetime import datetime
+    gate.decided_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(gate)
+
+    # Signal orchestrator to resume from checkpoint
+    from app.tasks.orchestrator import handle_gate_decision
+    handle_gate_decision.delay(
+        str(scan_id), gate_number, data.decision.value, data.user_modifications
+    )
+    return gate
