@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import { getAccessToken } from "@/lib/api";
+import type { ScanEvent } from "@/lib/types";
 
 type WSStatus = "connecting" | "connected" | "disconnected" | "reconnecting";
-
-interface ScanEvent {
-  event: string;
-  data: any;
-}
 
 export function useWebSocket(scanId: string | null) {
   const [status, setStatus] = useState<WSStatus>("disconnected");
@@ -21,7 +18,9 @@ export function useWebSocket(scanId: string | null) {
     if (!scanId) return;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}/ws/scan/${scanId}`;
+    const token = getAccessToken();
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : "";
+    const url = `${protocol}//${window.location.host}/ws/scan/${scanId}${tokenParam}`;
 
     setStatus("connecting");
     const ws = new WebSocket(url);
@@ -66,7 +65,7 @@ export function useWebSocket(scanId: string | null) {
     };
   }, [connect]);
 
-  const sendAction = useCallback((action: string, data: any = {}) => {
+  const sendAction = useCallback((action: string, data: Record<string, unknown> = {}) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action, ...data }));
     }

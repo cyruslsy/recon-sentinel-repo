@@ -15,11 +15,17 @@ from datetime import datetime
 from decimal import Decimal
 
 from app.core.celery_app import celery_app
+from app.core.tz import utc_now
 from app.core.database import AsyncSessionLocal
+from app.core.tz import utc_now
 from app.core.llm import llm_call, parse_llm_json, LLMUnavailableError
+from app.core.tz import utc_now
 from app.core.redis import publish_scan_event
+from app.core.tz import utc_now
 from app.models.models import Scan, ApprovalGate
+from app.core.tz import utc_now
 from app.models.enums import ScanPhase, ScanStatus, ApprovalDecision
+from app.core.tz import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +130,7 @@ class ScanOrchestrator:
 
             await self._save_checkpoint()
 
-        self.state.completed_at = datetime.utcnow().isoformat()
+        self.state.completed_at = utc_now().isoformat()
         await self._update_scan(ScanPhase.DONE, ScanStatus.COMPLETED)
         await self._save_checkpoint()
         await self._broadcast("scan.complete", {
@@ -174,9 +180,19 @@ class ScanOrchestrator:
 
     async def _run_vuln(self) -> None:
         await self._update_scan(ScanPhase.VULN)
-        # Nuclei agent — placeholder for now (needs template infrastructure)
-        # TODO: Wrap nuclei -u {target} -t /nuclei-templates/ -json
-        self.state.vuln_results = []
+        agents = ["app.agents.vuln.run_vuln_agent"]
+
+        # Apply re-plan modifications (may have added/skipped agents)
+        for decision in self.state.replan_decisions:
+            action = decision.get("action", "")
+            agent_type = decision.get("agent_type", "")
+            if action == "ADD_AGENT" and agent_type:
+                agents.append(f"app.agents.{agent_type}.run_{agent_type}_agent")
+            elif action == "SKIP_AGENT" and "vuln" in agent_type:
+                agents = [a for a in agents if agent_type not in a]
+
+        self.state.vuln_results = await self._dispatch_agents(agents)
+        await self._refresh_findings_summary()
 
     async def _generate_report(self) -> None:
         await self._update_scan(ScanPhase.REPORT)
@@ -287,7 +303,7 @@ class ScanOrchestrator:
                 self.state.planned_agents = [a for a in self.state.planned_agents if a != agent_type]
 
             self.state.replan_decisions.append({
-                **decision, "cost_usd": cost, "timestamp": datetime.utcnow().isoformat(),
+                **decision, "cost_usd": cost, "timestamp": utc_now().isoformat(),
             })
 
         except LLMUnavailableError:
@@ -384,7 +400,7 @@ def start_scan(scan_id: str, target_value: str, project_id: str, profile: str = 
     s = get_settings()
     state = ReconState(
         scan_id=scan_id, target_value=target_value, project_id=project_id,
-        profile=profile, started_at=datetime.utcnow().isoformat(),
+        profile=profile, started_at=utc_now().isoformat(),
         max_replan_iterations=s.LLM_MAX_REPLAN_ITERATIONS,
         max_replan_cost_usd=s.LLM_MAX_REPLAN_COST_USD,
     )

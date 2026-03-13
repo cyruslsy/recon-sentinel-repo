@@ -2,9 +2,27 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from jose import JWTError, jwt
+
+from app.core.config import get_settings
 
 router = APIRouter()
+
+settings = get_settings()
+
+
+async def _authenticate_ws(websocket: WebSocket, token: str | None) -> str | None:
+    """Validate JWT token from query param. Returns user_id or None."""
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            return None
+        return payload.get("sub")
+    except JWTError:
+        return None
 
 # In-memory connection manager (use Redis pub/sub in production)
 class ConnectionManager:
@@ -40,25 +58,16 @@ manager = ConnectionManager()
 
 
 @router.websocket("/scan/{scan_id}")
-async def scan_websocket(websocket: WebSocket, scan_id: str):
+async def scan_websocket(websocket: WebSocket, scan_id: str, token: str | None = Query(None)):
     """
     WebSocket endpoint for real-time scan updates.
-    
-    Clients connect to /ws/scan/{scan_id} and receive events:
-    
-    Event types pushed to clients:
-      - agent.status    → AgentRun status/progress change
-      - agent.finding   → New finding discovered
-      - agent.health    → Health event (anomaly, correction, escalation)
-      - scan.phase      → Scan phase transition
-      - scan.gate       → Approval gate ready for decision
-      - scan.complete   → Scan finished all phases
-      - chat.message    → AI Copilot response streaming
-    
-    Protocol:
-      - Server pushes JSON: {"event": "agent.status", "data": {...}}
-      - Client can send: {"action": "approve_gate", "gate_number": 1, "decision": "approved"}
+    Auth: pass JWT as query param: /ws/scan/{id}?token={access_token}
     """
+    user_id = await _authenticate_ws(websocket, token)
+    if not user_id:
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+
     await manager.connect(websocket, scan_id)
     
     try:

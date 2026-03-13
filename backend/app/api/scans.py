@@ -7,9 +7,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.models import Scan, ApprovalGate, Target
+from app.core.tz import utc_now
+from app.core.auth import get_current_user
+from app.core.tz import utc_now
+from app.models.models import User, Scan, ApprovalGate, Target
+from app.core.tz import utc_now
 from app.models.enums import ScanStatus, ApprovalDecision
+from app.core.tz import utc_now
 from app.schemas.schemas import (
+from app.core.tz import utc_now
     ScanCreate, ScanResponse, ScanBrief,
     ApprovalGateResponse, ApprovalGateDecision,
 )
@@ -39,7 +45,7 @@ async def list_scans(
 
 
 @router.post("/", response_model=ScanResponse, status_code=201)
-async def launch_scan(data: ScanCreate, db: AsyncSession = Depends(get_db)):
+async def launch_scan(data: ScanCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Launch a new scan. The orchestrator begins the passive phase immediately."""
     # Get target to resolve project_id
     target = await db.get(Target, data.target_id)
@@ -49,7 +55,7 @@ async def launch_scan(data: ScanCreate, db: AsyncSession = Depends(get_db)):
     scan = Scan(
         **data.model_dump(),
         status=ScanStatus.RUNNING,
-        created_by="00000000-0000-0000-0000-000000000000",  # TODO: from auth
+        created_by=user.id,
     )
     db.add(scan)
     await db.commit()
@@ -63,7 +69,7 @@ async def launch_scan(data: ScanCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{scan_id}", response_model=ScanResponse)
-async def get_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     scan = await db.get(Scan, scan_id)
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
@@ -71,7 +77,7 @@ async def get_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{scan_id}/stop")
-async def stop_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def stop_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Stop a running scan. All active agents are cancelled."""
     scan = await db.get(Scan, scan_id)
     if not scan:
@@ -85,7 +91,7 @@ async def stop_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{scan_id}/pause")
-async def pause_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def pause_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Pause scan at current phase. Can be resumed later."""
     scan = await db.get(Scan, scan_id)
     if not scan:
@@ -96,7 +102,7 @@ async def pause_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{scan_id}/resume")
-async def resume_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def resume_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Resume a paused scan from its LangGraph checkpoint."""
     scan = await db.get(Scan, scan_id)
     if not scan:
@@ -110,7 +116,7 @@ async def resume_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{scan_id}/archive")
-async def archive_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def archive_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     scan = await db.get(Scan, scan_id)
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
@@ -120,7 +126,7 @@ async def archive_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/{scan_id}", status_code=204)
-async def delete_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     scan = await db.get(Scan, scan_id)
     if not scan:
         raise HTTPException(status_code=404, detail="Scan not found")
@@ -131,7 +137,7 @@ async def delete_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
 # ─── Approval Gates ──────────────────────────────────────────────────
 
 @router.get("/{scan_id}/gates", response_model=list[ApprovalGateResponse])
-async def list_gates(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_gates(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(ApprovalGate).where(ApprovalGate.scan_id == scan_id).order_by(ApprovalGate.gate_number)
     )
@@ -139,7 +145,7 @@ async def list_gates(scan_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{scan_id}/gates/{gate_number}", response_model=ApprovalGateResponse)
-async def get_gate(scan_id: UUID, gate_number: int, db: AsyncSession = Depends(get_db)):
+async def get_gate(scan_id: UUID, gate_number: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(ApprovalGate).where(ApprovalGate.scan_id == scan_id, ApprovalGate.gate_number == gate_number)
     )
@@ -151,7 +157,7 @@ async def get_gate(scan_id: UUID, gate_number: int, db: AsyncSession = Depends(g
 
 @router.post("/{scan_id}/gates/{gate_number}/decide", response_model=ApprovalGateResponse)
 async def decide_gate(
-    scan_id: UUID, gate_number: int, data: ApprovalGateDecision, db: AsyncSession = Depends(get_db)
+    scan_id: UUID, gate_number: int, data: ApprovalGateDecision, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Submit human decision at an approval gate. Resumes the scan pipeline."""
     result = await db.execute(
@@ -166,7 +172,7 @@ async def decide_gate(
     gate.decision = data.decision
     gate.user_modifications = data.user_modifications
     from datetime import datetime
-    gate.decided_at = datetime.utcnow()
+    gate.decided_at = utc_now()
     await db.commit()
     await db.refresh(gate)
 

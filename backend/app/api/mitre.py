@@ -7,14 +7,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.models import MitreTechnique, MitreFindingCount
+from app.core.auth import get_current_user
+from app.models.models import User, MitreTechnique, MitreFindingCount
 from app.schemas.schemas import MitreTechniqueResponse, MitreHeatmapItem, MitreHeatmapResponse
 
 router = APIRouter()
 
 
 @router.get("/techniques", response_model=list[MitreTechniqueResponse])
-async def list_techniques(tactic_id: str | None = None, db: AsyncSession = Depends(get_db)):
+async def list_techniques(tactic_id: str | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """List all MITRE ATT&CK techniques, optionally filtered by tactic."""
     q = select(MitreTechnique)
     if tactic_id:
@@ -25,7 +26,7 @@ async def list_techniques(tactic_id: str | None = None, db: AsyncSession = Depen
 
 
 @router.get("/techniques/{technique_id}", response_model=MitreTechniqueResponse)
-async def get_technique(technique_id: str, db: AsyncSession = Depends(get_db)):
+async def get_technique(technique_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     tech = await db.get(MitreTechnique, technique_id)
     if not tech:
         raise HTTPException(status_code=404, detail="Technique not found")
@@ -33,7 +34,7 @@ async def get_technique(technique_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/heatmap/{scan_id}", response_model=MitreHeatmapResponse)
-async def get_heatmap(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_heatmap(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get MITRE ATT&CK heatmap data for a scan (from trigger-maintained counts)."""
     result = await db.execute(
         select(MitreFindingCount).where(MitreFindingCount.scan_id == scan_id).order_by(MitreFindingCount.technique_id)

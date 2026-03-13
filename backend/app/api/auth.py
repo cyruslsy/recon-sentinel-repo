@@ -13,12 +13,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import (
+from app.core.tz import utc_now
     create_access_token, create_refresh_token, decode_token,
     get_current_user, hash_password, revoke_token, verify_password,
 )
 from app.core.database import get_db
+from app.core.tz import utc_now
 from app.core.redis import blacklist_all_user_tokens
+from app.core.tz import utc_now
 from app.models.models import User
+from app.core.tz import utc_now
 
 router = APIRouter()
 
@@ -81,7 +85,7 @@ async def login(data: LoginRequest, response: Response, db: AsyncSession = Depen
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
-    user.last_login_at = datetime.utcnow()
+    user.last_login_at = utc_now()
     await db.commit()
     access_token = create_access_token(str(user.id), user.role.value)
     refresh_token, refresh_jti, refresh_expires = create_refresh_token(str(user.id))

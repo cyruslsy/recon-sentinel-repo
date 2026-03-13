@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
+import type { MitreHeatmapItem } from "@/lib/types";
 
 const SEVERITY_BG: Record<string, string> = {
   critical: "bg-red-500/30 border-red-500/50",
@@ -13,19 +14,12 @@ const SEVERITY_BG: Record<string, string> = {
   info: "bg-gray-500/10 border-gray-500/20",
 };
 
-interface HeatmapItem {
-  technique_id: string;
-  finding_count: number;
-  critical_count: number;
-  high_count: number;
-  medium_count: number;
-  max_severity: string | null;
-}
+
 
 export default function MitrePage() {
   const searchParams = useSearchParams();
   const scanId = searchParams?.get("scan_id") || "";
-  const [techniques, setTechniques] = useState<HeatmapItem[]>([]);
+  const [techniques, setTechniques] = useState<MitreHeatmapItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {

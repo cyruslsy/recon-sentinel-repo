@@ -22,7 +22,9 @@ from sqlalchemy.dialects.postgresql import ARRAY, INET, JSONB, UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, TimestampMixin
+from app.core.tz import utc_now
 from app.models.enums import (
+from app.core.tz import utc_now
     AgentStatus, ApprovalDecision, FindingSeverity, FindingType, HealthEventType,
     InputType, NotificationChannel, NotificationEvent, ReportFormat,
     ReportTemplate, ScanPhase, ScanProfile, ScanStatus, ScopeItemType,
@@ -102,7 +104,7 @@ class ProjectMember(Base):
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role", create_type=False), default=UserRole.TESTER)
-    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     project: Mapped["Project"] = relationship(back_populates="members")
     user: Mapped["User"] = relationship(back_populates="project_memberships")
@@ -175,7 +177,7 @@ class ScopeViolation(Base):
     attempted_target: Mapped[str] = mapped_column(String(500), nullable=False)
     matched_rule_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("scope_definitions.id"))
     reason: Mapped[str] = mapped_column(Text, nullable=False)
-    blocked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    blocked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     __table_args__ = (Index("idx_scope_violations_scan", "scan_id"),)
 
@@ -416,7 +418,7 @@ class MitreTechnique(Base):
     description: Mapped[Optional[str]] = mapped_column(Text)
     url: Mapped[Optional[str]] = mapped_column(String(500))
     is_subtechnique: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     __table_args__ = (
         Index("idx_mitre_tactics", "tactic_ids", postgresql_using="gin"),
@@ -438,8 +440,8 @@ class MitreFindingCount(Base):
     max_severity: Mapped[Optional[FindingSeverity]] = mapped_column(
         Enum(FindingSeverity, name="finding_severity", create_type=False)
     )
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -611,7 +613,7 @@ class ScanDiff(Base):
     resolved_vulns: Mapped[int] = mapped_column(Integer, default=0)
     new_credentials: Mapped[int] = mapped_column(Integer, default=0)
     ai_diff_summary: Mapped[Optional[str]] = mapped_column(Text)
-    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     diff_items: Mapped[list["ScanDiffItem"]] = relationship(back_populates="diff", cascade="all, delete-orphan")
 
@@ -666,8 +668,8 @@ class Report(Base):
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer)
     generated_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     __table_args__ = (Index("idx_reports_scan", "scan_id"),)
 
@@ -708,7 +710,7 @@ class NotificationLog(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending")
     error_message: Mapped[Optional[str]] = mapped_column(Text)
     sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     channel: Mapped["NotificationChannelModel"] = relationship(back_populates="logs")
 
@@ -815,7 +817,7 @@ class Plugin(Base, TimestampMixin):
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     is_sandboxed: Mapped[bool] = mapped_column(Boolean, default=True)
     installed_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    installed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    installed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     __table_args__ = (Index("idx_plugins_agent_type", "agent_type"),)
 

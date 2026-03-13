@@ -7,7 +7,8 @@ from sqlalchemy import select, func, any_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.models import Finding
+from app.core.auth import get_current_user
+from app.models.models import User, Finding
 from app.models.enums import FindingSeverity, FindingType
 from app.schemas.schemas import FindingResponse, FindingBrief, FindingUpdate, FindingBulkAction
 
@@ -49,7 +50,7 @@ async def list_findings(
 
 
 @router.get("/stats")
-async def finding_stats(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def finding_stats(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Aggregate stats for dashboard: count by severity, type, MITRE technique."""
     result = await db.execute(
         select(
@@ -74,7 +75,7 @@ async def finding_stats(scan_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{finding_id}", response_model=FindingResponse)
-async def get_finding(finding_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_finding(finding_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     finding = await db.get(Finding, finding_id)
     if not finding:
         raise HTTPException(status_code=404, detail="Finding not found")
@@ -82,7 +83,7 @@ async def get_finding(finding_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/{finding_id}", response_model=FindingResponse)
-async def update_finding(finding_id: UUID, data: FindingUpdate, db: AsyncSession = Depends(get_db)):
+async def update_finding(finding_id: UUID, data: FindingUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Update finding: mark false positive, add notes, assign to user, update tags."""
     finding = await db.get(Finding, finding_id)
     if not finding:
@@ -98,7 +99,7 @@ async def update_finding(finding_id: UUID, data: FindingUpdate, db: AsyncSession
 
 
 @router.post("/bulk", response_model=dict)
-async def bulk_action(data: FindingBulkAction, db: AsyncSession = Depends(get_db)):
+async def bulk_action(data: FindingBulkAction, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """P1: Bulk actions on multiple findings."""
     findings = []
     for fid in data.finding_ids:

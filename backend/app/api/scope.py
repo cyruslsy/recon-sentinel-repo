@@ -9,7 +9,8 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.models import ScopeDefinition, ScopeViolation
+from app.core.auth import get_current_user
+from app.models.models import User, ScopeDefinition, ScopeViolation
 from app.schemas.schemas import (
     ScopeItemCreate, ScopeItemResponse, ScopeItemUpdate,
     ScopeViolationResponse, ScopeCheckRequest, ScopeCheckResponse,
@@ -19,7 +20,7 @@ router = APIRouter()
 
 
 @router.get("/{project_id}", response_model=list[ScopeItemResponse])
-async def list_scope_items(project_id: UUID, status: str | None = None, db: AsyncSession = Depends(get_db)):
+async def list_scope_items(project_id: UUID, status: str | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """List all scope definitions for a project, optionally filtered by status."""
     q = select(ScopeDefinition).where(ScopeDefinition.project_id == project_id)
     if status:
@@ -30,7 +31,7 @@ async def list_scope_items(project_id: UUID, status: str | None = None, db: Asyn
 
 
 @router.post("/{project_id}", response_model=ScopeItemResponse, status_code=201)
-async def add_scope_item(project_id: UUID, data: ScopeItemCreate, db: AsyncSession = Depends(get_db)):
+async def add_scope_item(project_id: UUID, data: ScopeItemCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Add a domain, IP, CIDR, or regex to scope (in-scope or excluded)."""
     item = ScopeDefinition(**data.model_dump(), project_id=project_id)
     db.add(item)
@@ -40,7 +41,7 @@ async def add_scope_item(project_id: UUID, data: ScopeItemCreate, db: AsyncSessi
 
 
 @router.patch("/{item_id}", response_model=ScopeItemResponse)
-async def update_scope_item(item_id: UUID, data: ScopeItemUpdate, db: AsyncSession = Depends(get_db)):
+async def update_scope_item(item_id: UUID, data: ScopeItemUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Toggle a scope item between in_scope and out_of_scope."""
     item = await db.get(ScopeDefinition, item_id)
     if not item:
@@ -52,7 +53,7 @@ async def update_scope_item(item_id: UUID, data: ScopeItemUpdate, db: AsyncSessi
 
 
 @router.delete("/{item_id}", status_code=204)
-async def delete_scope_item(item_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_scope_item(item_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     item = await db.get(ScopeDefinition, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Scope item not found")
@@ -61,7 +62,7 @@ async def delete_scope_item(item_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{project_id}/check", response_model=ScopeCheckResponse)
-async def check_scope(project_id: UUID, data: ScopeCheckRequest, db: AsyncSession = Depends(get_db)):
+async def check_scope(project_id: UUID, data: ScopeCheckRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Check if a target value is in scope. Uses the is_in_scope() database function."""
     result = await db.execute(
         text("SELECT is_in_scope(:project_id, :target)"),
@@ -72,7 +73,7 @@ async def check_scope(project_id: UUID, data: ScopeCheckRequest, db: AsyncSessio
 
 
 @router.get("/{project_id}/violations", response_model=list[ScopeViolationResponse])
-async def list_violations(project_id: UUID, scan_id: UUID | None = None, limit: int = 50, db: AsyncSession = Depends(get_db)):
+async def list_violations(project_id: UUID, scan_id: UUID | None = None, limit: int = 50, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """List scope violations (blocked requests) for audit trail."""
     q = select(ScopeViolation).order_by(ScopeViolation.blocked_at.desc()).limit(limit)
     if scan_id:
@@ -82,14 +83,14 @@ async def list_violations(project_id: UUID, scan_id: UUID | None = None, limit: 
 
 
 @router.post("/{project_id}/import/hackerone")
-async def import_hackerone_scope(project_id: UUID, program_handle: str, db: AsyncSession = Depends(get_db)):
+async def import_hackerone_scope(project_id: UUID, program_handle: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Import scope from a HackerOne program."""
     # TODO: Call HackerOne API, parse scope, create ScopeDefinition entries
     return {"status": "import_queued", "source": "hackerone", "program": program_handle}
 
 
 @router.post("/{project_id}/import/bugcrowd")
-async def import_bugcrowd_scope(project_id: UUID, program_slug: str, db: AsyncSession = Depends(get_db)):
+async def import_bugcrowd_scope(project_id: UUID, program_slug: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Import scope from a Bugcrowd program."""
     # TODO: Call Bugcrowd API
     return {"status": "import_queued", "source": "bugcrowd", "program": program_slug}

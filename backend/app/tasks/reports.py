@@ -12,10 +12,15 @@ from datetime import datetime
 from sqlalchemy import select, func
 
 from app.core.celery_app import celery_app
+from app.core.tz import utc_now
 from app.core.database import AsyncSessionLocal
+from app.core.tz import utc_now
 from app.core.llm import llm_call, LLMUnavailableError
+from app.core.tz import utc_now
 from app.models.models import Report, Scan, Finding, Target
+from app.core.tz import utc_now
 from app.models.enums import FindingSeverity, ReportFormat
+from app.core.tz import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +117,7 @@ async def _generate_report(report_id: str) -> dict:
         "title": report_title or f"Recon Report — {target_value}",
         "target": target_value,
         "scan_id": scan_id_str,
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": utc_now().isoformat(),
         "executive_summary": executive_summary,
         "severity_counts": severity_counts,
         "total_findings": len(findings),
@@ -145,7 +150,7 @@ async def _generate_report(report_id: str) -> dict:
         if report:
             report.ai_executive_summary = executive_summary
             report.file_path = report_path
-            report.generated_at = datetime.utcnow()
+            report.generated_at = utc_now()
             report.ai_model_used = llm_model
             report.ai_tokens_used = llm_tokens
             report.ai_cost_usd = llm_cost

@@ -2,20 +2,21 @@
 
 import { useEffect, useState } from "react";
 import AppLayout from "@/components/AppLayout";
-import { fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
+import type { ApiKeyConfig, LlmUsageSummary } from "@/lib/types";
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<"api-keys" | "llm">("api-keys");
-  const [apiKeys, setApiKeys] = useState<any[]>([]);
-  const [llmUsage, setLlmUsage] = useState<any[]>([]);
+  const [apiKeys, setApiKeys] = useState<ApiKeyConfig[]>([]);
+  const [llmUsage, setLlmUsage] = useState<LlmUsageSummary[]>([]);
   const [newKey, setNewKey] = useState({ service_name: "", api_key: "" });
 
   useEffect(() => { loadData(); }, [tab]);
 
   async function loadData() {
     try {
-      if (tab === "api-keys") setApiKeys(await fetcher("/settings/api-keys"));
-      if (tab === "llm") setLlmUsage(await fetcher("/settings/llm-usage"));
+      if (tab === "api-keys") setApiKeys(await api.listApiKeys());
+      if (tab === "llm") setLlmUsage(await api.llmUsage());
     } catch {}
   }
 
@@ -23,12 +24,7 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!newKey.service_name || !newKey.api_key) return;
     try {
-      await fetch("/api/v1/settings/api-keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(newKey),
-      });
+      await api.addApiKey(newKey);
       setNewKey({ service_name: "", api_key: "" });
       loadData();
     } catch {}
@@ -36,12 +32,12 @@ export default function SettingsPage() {
 
   async function deleteKey(id: string) {
     try {
-      await fetch(`/api/v1/settings/api-keys/${id}`, { method: "DELETE", credentials: "include" });
+      await api.deleteApiKey(id);
       loadData();
     } catch {}
   }
 
-  const totalCost = llmUsage.reduce((sum: number, u: any) => sum + (u.cost_usd || 0), 0);
+  const totalCost = llmUsage.reduce((sum, u) => sum + (u.cost_usd || 0), 0);
 
   return (
     <AppLayout>
@@ -78,7 +74,7 @@ export default function SettingsPage() {
             </form>
 
             <div className="space-y-2">
-              {apiKeys.map((k: any) => (
+              {apiKeys.map((k) => (
                 <div key={k.id} className="flex items-center justify-between bg-sentinel-surface border border-sentinel-border rounded-lg px-4 py-3">
                   <div>
                     <span className="text-sm font-medium">{k.service_name}</span>
@@ -114,7 +110,7 @@ export default function SettingsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {llmUsage.map((u: any, i: number) => (
+                  {llmUsage.map((u, i) => (
                     <tr key={i} className="border-b border-sentinel-border/30">
                       <td className="py-2 px-4 text-sm font-mono">{u.model?.split("/").pop()?.split("-")[0]}</td>
                       <td className="py-2 px-4 text-sm">{u.task}</td>

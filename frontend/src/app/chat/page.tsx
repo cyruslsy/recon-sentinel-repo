@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
-import { fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
+import type { ChatMessage, ChatSession } from "@/lib/types";
 
 export default function ChatPage() {
   const searchParams = useSearchParams();
   const scanId = searchParams?.get("scan_id") || "";
   const [sessionId, setSessionId] = useState("");
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -19,17 +20,14 @@ export default function ChatPage() {
 
   async function initSession() {
     try {
-      const sessions = await fetcher(`/chat/sessions${scanId ? `?scan_id=${scanId}` : ""}`);
+      const sessions = await api.listChatSessions(scanId || undefined);
       if (sessions.length > 0) {
         setSessionId(sessions[0].id);
-        const msgs = await fetcher(`/chat/sessions/${sessions[0].id}/messages`);
+        const msgs = await api.listChatMessages(sessions[0].id);
         setMessages(msgs);
       } else {
         // Create new session
-        const res = await fetch(`/api/v1/chat/sessions${scanId ? `?scan_id=${scanId}` : ""}`, {
-          method: "POST", credentials: "include",
-        });
-        const session = await res.json();
+        const session = await api.createChatSession(scanId || undefined);
         setSessionId(session.id);
       }
     } catch {}
@@ -46,13 +44,7 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, { role: "user", content, id: `temp-${Date.now()}` }]);
 
     try {
-      const res = await fetch(`/api/v1/chat/sessions/${sessionId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ content }),
-      });
-      const aiMsg = await res.json();
+      const aiMsg = await api.sendChatMessage(sessionId, content);
       setMessages((prev) => [...prev, aiMsg]);
     } catch {
       setMessages((prev) => [...prev, { role: "ai", content: "Failed to get response. Try again.", id: `err-${Date.now()}` }]);

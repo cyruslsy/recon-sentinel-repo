@@ -7,7 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.models import ApiKey, ScanEngine, LlmUsageLog
+from app.core.auth import get_current_user
+from app.models.models import User, ApiKey, ScanEngine, LlmUsageLog
 from app.schemas.schemas import ApiKeyCreate, ApiKeyResponse, ScanEngineCreate, ScanEngineResponse
 
 router = APIRouter()
@@ -16,7 +17,7 @@ router = APIRouter()
 # ─── API Keys ─────────────────────────────────────────────────────────
 
 @router.get("/api-keys", response_model=list[ApiKeyResponse])
-async def list_api_keys(project_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
+async def list_api_keys(project_id: UUID | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     q = select(ApiKey).order_by(ApiKey.service_name)
     if project_id:
         q = q.where(ApiKey.project_id == project_id)
@@ -25,7 +26,7 @@ async def list_api_keys(project_id: UUID | None = None, db: AsyncSession = Depen
 
 
 @router.post("/api-keys", response_model=ApiKeyResponse, status_code=201)
-async def add_api_key(data: ApiKeyCreate, project_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
+async def add_api_key(data: ApiKeyCreate, project_id: UUID | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     key = ApiKey(
         service_name=data.service_name,
         api_key_encrypted=data.api_key,  # TODO: Encrypt with pgcrypto
@@ -38,7 +39,7 @@ async def add_api_key(data: ApiKeyCreate, project_id: UUID | None = None, db: As
 
 
 @router.delete("/api-keys/{key_id}", status_code=204)
-async def delete_api_key(key_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_api_key(key_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     key = await db.get(ApiKey, key_id)
     if not key:
         raise HTTPException(status_code=404, detail="API key not found")
@@ -47,7 +48,7 @@ async def delete_api_key(key_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/api-keys/{key_id}/verify")
-async def verify_api_key(key_id: UUID, db: AsyncSession = Depends(get_db)):
+async def verify_api_key(key_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Test if an API key is still valid by making a lightweight request to the service."""
     key = await db.get(ApiKey, key_id)
     if not key:
@@ -59,16 +60,16 @@ async def verify_api_key(key_id: UUID, db: AsyncSession = Depends(get_db)):
 # ─── Scan Engines ─────────────────────────────────────────────────────
 
 @router.get("/engines", response_model=list[ScanEngineResponse])
-async def list_engines(db: AsyncSession = Depends(get_db)):
+async def list_engines(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(ScanEngine).order_by(ScanEngine.is_default.desc(), ScanEngine.name))
     return result.scalars().all()
 
 
 @router.post("/engines", response_model=ScanEngineResponse, status_code=201)
-async def create_engine(data: ScanEngineCreate, db: AsyncSession = Depends(get_db)):
+async def create_engine(data: ScanEngineCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     engine = ScanEngine(
         **data.model_dump(),
-        created_by="00000000-0000-0000-0000-000000000000",
+        created_by=user.id,
     )
     # TODO: Parse YAML to JSON and validate structure
     db.add(engine)
@@ -78,7 +79,7 @@ async def create_engine(data: ScanEngineCreate, db: AsyncSession = Depends(get_d
 
 
 @router.get("/engines/{engine_id}", response_model=ScanEngineResponse)
-async def get_engine(engine_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_engine(engine_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     engine = await db.get(ScanEngine, engine_id)
     if not engine:
         raise HTTPException(status_code=404, detail="Scan engine not found")
@@ -86,7 +87,7 @@ async def get_engine(engine_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/engines/{engine_id}", response_model=ScanEngineResponse)
-async def update_engine(engine_id: UUID, data: ScanEngineCreate, db: AsyncSession = Depends(get_db)):
+async def update_engine(engine_id: UUID, data: ScanEngineCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     engine = await db.get(ScanEngine, engine_id)
     if not engine:
         raise HTTPException(status_code=404, detail="Scan engine not found")
@@ -98,7 +99,7 @@ async def update_engine(engine_id: UUID, data: ScanEngineCreate, db: AsyncSessio
 
 
 @router.delete("/engines/{engine_id}", status_code=204)
-async def delete_engine(engine_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_engine(engine_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     engine = await db.get(ScanEngine, engine_id)
     if not engine:
         raise HTTPException(status_code=404, detail="Scan engine not found")
@@ -109,7 +110,7 @@ async def delete_engine(engine_id: UUID, db: AsyncSession = Depends(get_db)):
 # ─── LLM Usage & Cost ────────────────────────────────────────────────
 
 @router.get("/llm-usage")
-async def llm_usage_summary(scan_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
+async def llm_usage_summary(scan_id: UUID | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get LLM usage and cost summary."""
     from sqlalchemy import func
     

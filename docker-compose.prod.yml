@@ -1,0 +1,225 @@
+# ═══════════════════════════════════════════════════════════════
+# Recon Sentinel — Docker Compose (Production)
+# Differences from dev:
+#   - PostgreSQL/Redis ports NOT exposed to host
+#   - No --reload on uvicorn
+#   - No bind mounts (code baked into image)
+#   - Resource limits on all services
+#   - Restart always
+# ═══════════════════════════════════════════════════════════════
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sentinel-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: recon_sentinel
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # NO ports exposed — only accessible within Docker network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel -d recon_sentinel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+
+  redis:
+    image: redis:7-alpine
+    container_name: sentinel-redis
+    restart: always
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass "${REDIS_PASSWORD:-changeme}"
+    volumes:
+      - redisdata:/data
+    # NO ports exposed
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
+  db-init:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentinel-db-init
+    command: >
+      sh -c "
+        while ! pg_isready -h postgres -U sentinel -d recon_sentinel; do sleep 1; done &&
+        cd /app && alembic upgrade head
+      "
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sentinel:@postgres:5432/recon_sentinel
+      DB_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentinel-api
+    restart: always
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers 4
+      --log-level warning
+    # NO --reload, NO bind mount
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sentinel:@postgres:5432/recon_sentinel
+      REDIS_URL: redis://redis:6379/0
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+      APP_ENV: production
+    secrets:
+      - db_password
+      - jwt_secret
+      - anthropic_api_key
+    ports:
+      - "8000:8000"
+    volumes:
+      - scan_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "2.0"
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentinel-worker
+    restart: always
+    command: >
+      celery -A app.core.celery_app worker
+      --loglevel=warning
+      --concurrency=4
+      --queues=default,subdomain,port_scan,web_recon,osint,threat_intel,cred_leak,email_sec,ssl_tls,waf,cloud,dir_file,vuln,historical,js_analysis
+      --hostname=worker-tools@%h
+    environment:
+      DATABASE_URL: postgresql+asyncpg://sentinel:@postgres:5432/recon_sentinel
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      DB_PASSWORD_FILE: /run/secrets/db_password
+      ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+    secrets:
+      - db_password
+      - anthropic_api_key
+    volumes:
+      - scan_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    # Security hardening
+    user: "1000:1000"
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:size=100M
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentinel-beat
+    restart: always
+    command: >
+      celery -A app.core.celery_app beat
+      --loglevel=warning
+      --schedule=/tmp/celerybeat-schedule
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+    depends_on:
+      redis:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=10M
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.25"
+
+  nginx:
+    image: nginx:alpine
+    container_name: sentinel-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Mount TLS certs in production:
+      # - ./certs/fullchain.pem:/etc/nginx/ssl/cert.pem:ro
+      # - ./certs/privkey.pem:/etc/nginx/ssl/key.pem:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+
+secrets:
+  db_password:
+    file: ./secrets/db_password
+  jwt_secret:
+    file: ./secrets/jwt_secret
+  anthropic_api_key:
+    file: ./secrets/anthropic_api_key
+
+volumes:
+  pgdata:
+  redisdata:
+  scan_data:

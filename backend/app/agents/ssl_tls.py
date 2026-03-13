@@ -12,8 +12,11 @@ import re
 from datetime import datetime
 
 from app.agents.base import BaseAgent
+from app.core.tz import utc_now
 from app.core.celery_app import celery_app
+from app.core.tz import utc_now
 from app.models.enums import FindingSeverity, FindingType, ScanPhase
+from app.core.tz import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,7 @@ class SSLTLSAgent(BaseAgent):
             # Check expiry
             expiry = cert_info.get("expiry")
             if expiry:
-                days_left = (expiry - datetime.utcnow()).days
+                days_left = (expiry - utc_now()).days
                 if days_left < 0:
                     findings.append(self._make("certificate_expired",
                         f"SSL certificate EXPIRED ({abs(days_left)} days ago)",

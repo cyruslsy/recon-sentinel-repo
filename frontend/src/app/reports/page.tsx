@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import AppLayout from "@/components/AppLayout";
-import { fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
+import type { Report, Scan } from "@/lib/types";
 
 export default function ReportsPage() {
-  const [reports, setReports] = useState<any[]>([]);
-  const [scans, setScans] = useState<any[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [scans, setScans] = useState<Scan[]>([]);
   const [generating, setGenerating] = useState(false);
   const [selectedScan, setSelectedScan] = useState("");
   const [template, setTemplate] = useState("full");
@@ -15,8 +16,8 @@ export default function ReportsPage() {
 
   async function loadData() {
     try {
-      setReports(await fetcher("/reports"));
-      setScans(await fetcher("/scans?limit=20"));
+      setReports(await api.listReports());
+      setScans(await api.listScans("limit=20"));
     } catch {}
   }
 
@@ -25,12 +26,7 @@ export default function ReportsPage() {
     if (!selectedScan) return;
     setGenerating(true);
     try {
-      await fetch("/api/v1/reports", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ scan_id: selectedScan, template, format: "json" }),
-      });
+      await api.generateReport({ scan_id: selectedScan, template, format: "json" });
       setTimeout(loadData, 2000); // Refresh after generation starts
     } catch {}
     setGenerating(false);
@@ -68,7 +64,7 @@ export default function ReportsPage() {
 
         {/* Report List */}
         <div className="space-y-2">
-          {reports.map((r: any) => (
+          {reports.map((r) => (
             <div key={r.id} className="bg-sentinel-surface border border-sentinel-border rounded-lg p-4 flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">{r.report_title || `Report ${r.id?.slice(0, 8)}`}</p>

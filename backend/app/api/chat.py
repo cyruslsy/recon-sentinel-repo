@@ -10,8 +10,9 @@ from sqlalchemy import func as sqlfunc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.auth import get_current_user
 from app.core.llm import llm_call, LLMUnavailableError
-from app.models.models import ChatSession, ChatMessage, Scan, Finding, Target
+from app.models.models import User, ChatSession, ChatMessage, Scan, Finding, Target
 from app.schemas.schemas import ChatMessageCreate, ChatMessageResponse, ChatSessionResponse
 
 router = APIRouter()
@@ -20,7 +21,7 @@ router = APIRouter()
 # ─── Sessions ─────────────────────────────────────────────────────────
 
 @router.get("/sessions", response_model=list[ChatSessionResponse])
-async def list_sessions(scan_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
+async def list_sessions(scan_id: UUID | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     q = select(ChatSession).order_by(ChatSession.created_at.desc())
     if scan_id:
         q = q.where(ChatSession.scan_id == scan_id)
@@ -42,10 +43,10 @@ async def list_sessions(scan_id: UUID | None = None, db: AsyncSession = Depends(
 
 
 @router.post("/sessions", response_model=ChatSessionResponse, status_code=201)
-async def create_session(scan_id: UUID | None = None, title: str | None = None, db: AsyncSession = Depends(get_db)):
+async def create_session(scan_id: UUID | None = None, title: str | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     session = ChatSession(
         scan_id=scan_id, title=title or "New Chat",
-        user_id="00000000-0000-0000-0000-000000000000",  # TODO: from auth
+        user_id=user.id,
     )
     db.add(session)
     await db.commit()
@@ -75,7 +76,7 @@ async def list_messages(
 
 
 @router.post("/sessions/{session_id}/messages", response_model=ChatMessageResponse, status_code=201)
-async def send_message(session_id: UUID, data: ChatMessageCreate, db: AsyncSession = Depends(get_db)):
+async def send_message(session_id: UUID, data: ChatMessageCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """
     Send a user message to the AI Copilot.
     

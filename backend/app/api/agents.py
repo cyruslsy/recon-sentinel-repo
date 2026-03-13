@@ -7,8 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.models import AgentRun, HealthEvent
+from app.core.tz import utc_now
+from app.core.auth import get_current_user
+from app.core.tz import utc_now
+from app.models.models import User, AgentRun, HealthEvent
+from app.core.tz import utc_now
 from app.schemas.schemas import AgentRunResponse, AgentRunBrief, HealthEventResponse, HealthEventDecision
+from app.core.tz import utc_now
 
 router = APIRouter()
 
@@ -16,7 +21,7 @@ router = APIRouter()
 # ─── Agent Runs ───────────────────────────────────────────────────────
 
 @router.get("/", response_model=list[AgentRunBrief])
-async def list_agent_runs(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def list_agent_runs(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(AgentRun).where(AgentRun.scan_id == scan_id).order_by(AgentRun.phase, AgentRun.created_at)
     )
@@ -24,7 +29,7 @@ async def list_agent_runs(scan_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{agent_run_id}", response_model=AgentRunResponse)
-async def get_agent_run(agent_run_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_agent_run(agent_run_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     agent = await db.get(AgentRun, agent_run_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent run not found")
@@ -32,7 +37,7 @@ async def get_agent_run(agent_run_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{agent_run_id}/pause")
-async def pause_agent(agent_run_id: UUID, db: AsyncSession = Depends(get_db)):
+async def pause_agent(agent_run_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Pause a running agent."""
     agent = await db.get(AgentRun, agent_run_id)
     if not agent:
@@ -43,7 +48,7 @@ async def pause_agent(agent_run_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{agent_run_id}/resume")
-async def resume_agent(agent_run_id: UUID, db: AsyncSession = Depends(get_db)):
+async def resume_agent(agent_run_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Resume a paused agent."""
     agent = await db.get(AgentRun, agent_run_id)
     if not agent:
@@ -55,7 +60,7 @@ async def resume_agent(agent_run_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/{agent_run_id}/rerun")
-async def rerun_agent(agent_run_id: UUID, db: AsyncSession = Depends(get_db)):
+async def rerun_agent(agent_run_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Re-run a completed/failed agent from scratch."""
     agent = await db.get(AgentRun, agent_run_id)
     if not agent:
@@ -82,7 +87,7 @@ async def list_health_events(
 
 
 @router.get("/health/{event_id}", response_model=HealthEventResponse)
-async def get_health_event(event_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_health_event(event_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     event = await db.get(HealthEvent, event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Health event not found")
@@ -90,7 +95,7 @@ async def get_health_event(event_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/health/{event_id}/decide", response_model=HealthEventResponse)
-async def decide_health_escalation(event_id: UUID, data: HealthEventDecision, db: AsyncSession = Depends(get_db)):
+async def decide_health_escalation(event_id: UUID, data: HealthEventDecision, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Respond to an escalate_user health event with a decision."""
     event = await db.get(HealthEvent, event_id)
     if not event:
@@ -102,7 +107,7 @@ async def decide_health_escalation(event_id: UUID, data: HealthEventDecision, db
     
     event.user_decision = data.decision
     from datetime import datetime
-    event.decided_at = datetime.utcnow()
+    event.decided_at = utc_now()
     await db.commit()
     await db.refresh(event)
     

@@ -32,3 +32,8 @@ pyyaml==6.0.*
 # ─── Report Generation ───────────────────────────────────────
 python-docx==1.1.*
 # weasyprint — install via system package for PDF support
+
+# ─── Testing ──────────────────────────────────────────────────
+pytest==8.3.*
+pytest-asyncio==0.24.*
+aiosqlite==0.20.*     # SQLite async driver for tests

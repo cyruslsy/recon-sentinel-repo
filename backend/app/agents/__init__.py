@@ -16,5 +16,8 @@ from app.agents.email_sec import EmailSecurityAgent, run_email_sec_agent  # noqa
 from app.agents.ssl_tls import SSLTLSAgent, run_ssl_tls_agent  # noqa: F401
 from app.agents.osint import OSINTAgent, run_osint_agent  # noqa: F401
 
+# Sprint E agent
+from app.agents.vuln import VulnAgent, run_vuln_agent  # noqa: F401
+
 # Self-correction patterns
 from app.agents.corrections import detect_anomalies  # noqa: F401

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
+import type { Scan } from "@/lib/types";
 
 const PROFILES = [
   { value: "full", label: "Full Scan", desc: "All agents, all phases" },
@@ -14,7 +15,7 @@ const PROFILES = [
 
 export default function ScansPage() {
   const router = useRouter();
-  const [scans, setScans] = useState<any[]>([]);
+  const [scans, setScans] = useState<Scan[]>([]);
   const [showLaunch, setShowLaunch] = useState(false);
   const [target, setTarget] = useState("");
   const [profile, setProfile] = useState("full");
@@ -54,8 +55,8 @@ export default function ScansPage() {
       const t = await api.createTarget(project.id, { target_value: target, input_type: inputType });
       const scan = await api.launchScan({ target_id: t.id, profile });
       router.push(`/agents?scan_id=${scan.id}`);
-    } catch (err: any) {
-      setError(err.detail || "Failed to launch scan");
+    } catch (err: unknown) {
+      setError((err as { detail?: string })?.detail || "Failed to launch scan");
     } finally {
       setLaunching(false);
     }

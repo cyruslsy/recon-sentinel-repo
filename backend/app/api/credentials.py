@@ -7,7 +7,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.models import CredentialLeak
+from app.core.auth import get_current_user
+from app.models.models import User, CredentialLeak
 from app.schemas.schemas import CredentialLeakResponse, CredentialLeakSummary
 
 router = APIRouter()
@@ -32,7 +33,7 @@ async def list_credentials(
 
 
 @router.get("/summary", response_model=CredentialLeakSummary)
-async def credential_summary(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def credential_summary(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     base = select(func.count()).select_from(CredentialLeak).where(CredentialLeak.scan_id == scan_id)
     total = (await db.execute(base)).scalar() or 0
     with_pw = (await db.execute(base.where(CredentialLeak.has_password == True))).scalar() or 0  # noqa
@@ -42,7 +43,7 @@ async def credential_summary(scan_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{cred_id}", response_model=CredentialLeakResponse)
-async def get_credential(cred_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_credential(cred_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     cred = await db.get(CredentialLeak, cred_id)
     if not cred:
         raise HTTPException(status_code=404, detail="Credential not found")

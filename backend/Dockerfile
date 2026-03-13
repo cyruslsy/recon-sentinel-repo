@@ -1,33 +1,45 @@
 # ═══════════════════════════════════════════════════════════════
-# Recon Sentinel — Backend Dockerfile
-# Python 3.11 + FastAPI + Celery + Alembic
+# Recon Sentinel — Backend Dockerfile (multi-stage)
+# Stage 1: Install deps with build tools
+# Stage 2: Slim runtime with only what's needed
 # ═══════════════════════════════════════════════════════════════
 
-FROM python:3.11-slim AS base
+# ─── Builder ──────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
 
-# System deps for asyncpg, bcrypt, and pg_isready
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ─── Runtime ──────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
     postgresql-client \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy installed Python packages from builder
+COPY --from=builder /install /usr/local
+
 WORKDIR /app
-
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
 COPY . .
 
-# Create non-root user for production
+# Create non-root user
 RUN groupadd -g 1000 sentinel && \
     useradd -u 1000 -g sentinel -s /bin/sh sentinel && \
     mkdir -p /data/screenshots /data/reports /tmp && \
     chown -R sentinel:sentinel /app /data /tmp
 
 EXPOSE 8000
+
+# Default: run as non-root
+USER sentinel
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

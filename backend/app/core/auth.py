@@ -22,13 +22,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.tz import utc_now
 from app.core.database import get_db
+from app.core.tz import utc_now
 from app.core.redis import (
+from app.core.tz import utc_now
     blacklist_token, is_token_blacklisted,
     get_user_revoked_at,
     check_api_key_rate_limit, reset_api_key_rate_limit,
 )
 from app.models.models import User
+from app.core.tz import utc_now
 
 settings = get_settings()
 
@@ -49,13 +53,13 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(user_id: str, role: str) -> str:
     """Short-lived access token (15 min default)."""
-    expire = datetime.utcnow() + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = utc_now() + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": user_id,
         "role": role,
         "type": "access",
         "jti": str(uuid.uuid4()),
-        "iat": datetime.utcnow(),
+        "iat": utc_now(),
         "exp": expire,
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
@@ -63,13 +67,13 @@ def create_access_token(user_id: str, role: str) -> str:
 
 def create_refresh_token(user_id: str) -> tuple[str, str, datetime]:
     """Long-lived refresh token (7 day default). Returns (token, jti, expires_at)."""
-    expire = datetime.utcnow() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
+    expire = utc_now() + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
     jti = str(uuid.uuid4())
     payload = {
         "sub": user_id,
         "type": "refresh",
         "jti": jti,
-        "iat": datetime.utcnow(),
+        "iat": utc_now(),
         "exp": expire,
     }
     token = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
@@ -92,7 +96,7 @@ def decode_token(token: str) -> dict:
 
 async def revoke_token(jti: str, expires_at: datetime) -> None:
     """Blacklist a specific token by its JTI."""
-    ttl = max(int((expires_at - datetime.utcnow()).total_seconds()), 1)
+    ttl = max(int((expires_at - utc_now()).total_seconds()), 1)
     await blacklist_token(jti, ttl)
 
 

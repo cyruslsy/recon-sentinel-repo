@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
 import { useWebSocket, useFilteredEvents } from "@/hooks/useWebSocket";
+import type { Scan, AgentRun, ApprovalGate } from "@/lib/types";
 
 function ProgressBar({ pct, color = "bg-sentinel-accent" }: { pct: number; color?: string }) {
   return (
@@ -17,7 +18,7 @@ function ProgressBar({ pct, color = "bg-sentinel-accent" }: { pct: number; color
   );
 }
 
-function AgentCard({ agent, wsData }: { agent: any; wsData?: any }) {
+function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string, unknown> }) {
   const data = wsData || agent;
   const pct = data.progress_pct || 0;
   const status = data.status || agent.status;
@@ -62,7 +63,7 @@ function AgentCard({ agent, wsData }: { agent: any; wsData?: any }) {
   );
 }
 
-function GateBanner({ gate, scanId, onDecided }: { gate: any; scanId: string; onDecided: () => void }) {
+function GateBanner({ gate, scanId, onDecided }: { gate: ApprovalGate; scanId: string; onDecided: () => void }) {
   const [deciding, setDeciding] = useState(false);
 
   async function handleDecide(decision: string) {
@@ -122,9 +123,9 @@ function GateBanner({ gate, scanId, onDecided }: { gate: any; scanId: string; on
 export default function AgentsPage() {
   const searchParams = useSearchParams();
   const scanId = searchParams?.get("scan_id") || null;
-  const [agents, setAgents] = useState<any[]>([]);
-  const [gates, setGates] = useState<any[]>([]);
-  const [scan, setScan] = useState<any>(null);
+  const [agents, setAgents] = useState<AgentRun[]>([]);
+  const [gates, setGates] = useState<ApprovalGate[]>([]);
+  const [scan, setScan] = useState<Scan | null>(null);
   const { status: wsStatus, events } = useWebSocket(scanId);
 
   // Memoize agent WS data map — only rebuilds when events array changes

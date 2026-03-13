@@ -8,14 +8,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.models import Report
+from app.core.auth import get_current_user
+from app.models.models import User, Report
 from app.schemas.schemas import ReportCreate, ReportResponse
 
 router = APIRouter()
 
 
 @router.get("/", response_model=list[ReportResponse])
-async def list_reports(scan_id: UUID | None = None, db: AsyncSession = Depends(get_db)):
+async def list_reports(scan_id: UUID | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     q = select(Report).order_by(Report.generated_at.desc())
     if scan_id:
         q = q.where(Report.scan_id == scan_id)
@@ -24,12 +25,12 @@ async def list_reports(scan_id: UUID | None = None, db: AsyncSession = Depends(g
 
 
 @router.post("/", response_model=ReportResponse, status_code=201)
-async def generate_report(data: ReportCreate, db: AsyncSession = Depends(get_db)):
+async def generate_report(data: ReportCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Generate a new report. Dispatches LLM-powered report generation via Celery."""
     report = Report(
         **data.model_dump(),
         file_path="pending",
-        generated_by="00000000-0000-0000-0000-000000000000",  # TODO: from auth
+        generated_by=user.id,
     )
     db.add(report)
     await db.commit()
@@ -43,7 +44,7 @@ async def generate_report(data: ReportCreate, db: AsyncSession = Depends(get_db)
 
 
 @router.get("/{report_id}", response_model=ReportResponse)
-async def get_report(report_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_report(report_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     report = await db.get(Report, report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
@@ -51,7 +52,7 @@ async def get_report(report_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{report_id}/download")
-async def download_report(report_id: UUID, db: AsyncSession = Depends(get_db)):
+async def download_report(report_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Download the generated report file."""
     report = await db.get(Report, report_id)
     if not report:
@@ -62,7 +63,7 @@ async def download_report(report_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/{report_id}", status_code=204)
-async def delete_report(report_id: UUID, db: AsyncSession = Depends(get_db)):
+async def delete_report(report_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     report = await db.get(Report, report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")

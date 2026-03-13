@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import AppLayout from "@/components/AppLayout";
 import { api, fetcher } from "@/lib/api";
+import type { Scan } from "@/lib/types";
 
 const SEVERITY_COLORS: Record<string, string> = {
   critical: "#EF4444",
@@ -24,7 +25,7 @@ function StatCard({ label, value, color }: { label: string; value: string | numb
   );
 }
 
-function ScanRow({ scan }: { scan: any }) {
+function ScanRow({ scan }: { scan: Scan }) {
   const statusColor =
     scan.status === "completed" ? "text-sentinel-green" :
     scan.status === "running" ? "text-sentinel-accent" :
@@ -61,7 +62,7 @@ function ScanRow({ scan }: { scan: any }) {
 }
 
 export default function DashboardPage() {
-  const [scans, setScans] = useState<any[]>([]);
+  const [scans, setScans] = useState<Scan[]>([]);
   const [stats, setStats] = useState({ total: 0, running: 0, critical: 0, findings: 0 });
 
   useEffect(() => {
@@ -73,9 +74,9 @@ export default function DashboardPage() {
       const scanList = await api.listScans("limit=10");
       setScans(scanList);
 
-      const running = scanList.filter((s: any) => s.status === "running").length;
-      const totalFindings = scanList.reduce((sum: number, s: any) => sum + (s.total_findings || 0), 0);
-      const criticals = scanList.reduce((sum: number, s: any) => sum + (s.critical_count || 0), 0);
+      const running = scanList.filter((s) => s.status === "running").length;
+      const totalFindings = scanList.reduce((sum, s) => sum + (s.total_findings || 0), 0);
+      const criticals = scanList.reduce((sum, s) => sum + (s.critical_count || 0), 0);
 
       setStats({
         total: scanList.length,

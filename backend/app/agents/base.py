@@ -21,11 +21,15 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
+from app.core.tz import utc_now
 from app.core.redis import publish_scan_event
+from app.core.tz import utc_now
 from app.models.models import (
+from app.core.tz import utc_now
     AgentRun, Finding, HealthEvent, ScopeViolation,
 )
 from app.models.enums import (
+from app.core.tz import utc_now
     AgentStatus, FindingSeverity, FindingType, HealthEventType, ScanPhase,
 )
 
@@ -84,7 +88,7 @@ class BaseAgent(ABC):
                 status=AgentStatus.RUNNING,
                 phase=self.phase,
                 mitre_tags=self.mitre_tags,
-                started_at=datetime.utcnow(),
+                started_at=utc_now(),
             )
             db.add(agent_run)
             await db.commit()
@@ -161,7 +165,7 @@ class BaseAgent(ABC):
             agent_run = await db.get(AgentRun, uuid.UUID(self.agent_run_id))
             if agent_run:
                 agent_run.status = status
-                agent_run.completed_at = datetime.utcnow()
+                agent_run.completed_at = utc_now()
                 if agent_run.started_at:
                     agent_run.duration_seconds = int(
                         (agent_run.completed_at - agent_run.started_at).total_seconds()

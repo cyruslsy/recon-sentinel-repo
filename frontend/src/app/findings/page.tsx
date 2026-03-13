@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
+import type { Finding } from "@/lib/types";
 
 const SEVERITY_BADGE: Record<string, string> = {
   critical: "bg-red-500/20 text-red-400",
@@ -16,7 +17,7 @@ const SEVERITY_BADGE: Record<string, string> = {
 export default function FindingsPage() {
   const searchParams = useSearchParams();
   const scanId = searchParams?.get("scan_id") || "";
-  const [findings, setFindings] = useState<any[]>([]);
+  const [findings, setFindings] = useState<Finding[]>([]);
   const [filter, setFilter] = useState({ severity: "", search: "", showFP: false });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);

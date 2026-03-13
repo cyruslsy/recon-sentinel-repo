@@ -17,8 +17,11 @@ from decimal import Decimal
 from sqlalchemy import func, select
 
 from app.core.config import get_settings
+from app.core.tz import utc_now
 from app.core.database import AsyncSessionLocal
+from app.core.tz import utc_now
 from app.models.models import LlmUsageLog
+from app.core.tz import utc_now
 
 try:
     import litellm
@@ -204,7 +207,7 @@ async def _check_budget() -> None:
     if budget <= 0:
         return  # Budget enforcement disabled
 
-    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_start = utc_now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     try:
         async with AsyncSessionLocal() as db:

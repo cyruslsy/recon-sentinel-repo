@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import AppLayout from "@/components/AppLayout";
-import { fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
+import type { ScopeItem, ScopeViolation } from "@/lib/types";
 
 export default function ScopePage() {
   const [projectId, setProjectId] = useState("");
-  const [items, setItems] = useState<any[]>([]);
-  const [violations, setViolations] = useState<any[]>([]);
+  const [items, setItems] = useState<ScopeItem[]>([]);
+  const [violations, setViolations] = useState<ScopeViolation[]>([]);
   const [newItem, setNewItem] = useState({ item_type: "domain", item_value: "", status: "in_scope" });
   const [tab, setTab] = useState<"scope" | "violations">("scope");
 
@@ -25,23 +26,18 @@ export default function ScopePage() {
   }
 
   async function loadScope(pid: string) {
-    try { setItems(await fetcher(`/scope/${pid}`)); } catch {}
+    try { setItems(await api.listScope(pid)); } catch {}
   }
 
   async function loadViolations(pid: string) {
-    try { setViolations(await fetcher(`/scope/${pid}/violations?limit=20`)); } catch {}
+    try { setViolations(await api.listViolations(pid)); } catch {}
   }
 
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
     if (!projectId || !newItem.item_value) return;
     try {
-      await fetch(`/api/v1/scope/${projectId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(newItem),
-      });
+      await api.addScopeItem(projectId, newItem);
       setNewItem({ item_type: "domain", item_value: "", status: "in_scope" });
       loadScope(projectId);
     } catch {}
@@ -50,12 +46,7 @@ export default function ScopePage() {
   async function toggleItem(id: string, currentStatus: string) {
     const newStatus = currentStatus === "in_scope" ? "out_of_scope" : "in_scope";
     try {
-      await fetch(`/api/v1/scope/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ status: newStatus }),
-      });
+      await api.toggleScopeItem(id, newStatus);
       loadScope(projectId);
     } catch {}
   }
@@ -136,7 +127,7 @@ export default function ScopePage() {
           <div className="space-y-2">
             {violations.length === 0 ? (
               <p className="text-sentinel-muted text-sm py-8 text-center">No scope violations recorded.</p>
-            ) : violations.map((v: any) => (
+            ) : violations.map((v) => (
               <div key={v.id} className="bg-sentinel-red/5 border border-sentinel-red/20 rounded-lg p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-sentinel-red">{v.attempted_target}</span>

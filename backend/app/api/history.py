@@ -7,14 +7,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.models.models import ScanDiff, ScanDiffItem
+from app.core.auth import get_current_user
+from app.models.models import User, ScanDiff, ScanDiffItem
 from app.schemas.schemas import ScanDiffResponse, ScanDiffItemResponse
 
 router = APIRouter()
 
 
 @router.get("/diff/{scan_id}", response_model=ScanDiffResponse | None)
-async def get_latest_diff(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_latest_diff(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get the diff between this scan and the most recent previous scan."""
     result = await db.execute(
         select(ScanDiff).where(ScanDiff.scan_id == scan_id).order_by(ScanDiff.computed_at.desc()).limit(1)
@@ -23,7 +24,7 @@ async def get_latest_diff(scan_id: UUID, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/diff/{scan_id}/vs/{prev_scan_id}", response_model=ScanDiffResponse)
-async def get_specific_diff(scan_id: UUID, prev_scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def get_specific_diff(scan_id: UUID, prev_scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get diff between two specific scans."""
     result = await db.execute(
         select(ScanDiff).where(ScanDiff.scan_id == scan_id, ScanDiff.prev_scan_id == prev_scan_id)
@@ -36,7 +37,7 @@ async def get_specific_diff(scan_id: UUID, prev_scan_id: UUID, db: AsyncSession 
 
 @router.get("/diff/{diff_id}/items", response_model=list[ScanDiffItemResponse])
 async def list_diff_items(
-    diff_id: UUID, change_type: str | None = None, db: AsyncSession = Depends(get_db)
+    diff_id: UUID, change_type: str | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """List individual changes in a diff."""
     q = select(ScanDiffItem).where(ScanDiffItem.diff_id == diff_id)
@@ -48,7 +49,7 @@ async def list_diff_items(
 
 
 @router.post("/diff/{scan_id}/compute")
-async def compute_diff(scan_id: UUID, prev_scan_id: UUID, db: AsyncSession = Depends(get_db)):
+async def compute_diff(scan_id: UUID, prev_scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Trigger diff computation between two scans."""
     # TODO: Celery — diff_computer.compute.delay(str(scan_id), str(prev_scan_id))
     return {"status": "diff_computation_queued", "scan_id": str(scan_id), "prev_scan_id": str(prev_scan_id)}

@@ -3,20 +3,21 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
-import { fetcher } from "@/lib/api";
+import { api } from "@/lib/api";
+import type { CredentialLeak, CredentialSummary } from "@/lib/types";
 
 export default function CredentialsPage() {
   const searchParams = useSearchParams();
   const scanId = searchParams?.get("scan_id") || "";
-  const [creds, setCreds] = useState<any[]>([]);
-  const [summary, setSummary] = useState<any>(null);
+  const [creds, setCreds] = useState<CredentialLeak[]>([]);
+  const [summary, setSummary] = useState<CredentialSummary | null>(null);
 
   useEffect(() => { if (scanId) loadCreds(); }, [scanId]);
 
   async function loadCreds() {
     try {
-      setCreds(await fetcher(`/credentials?scan_id=${scanId}`));
-      setSummary(await fetcher(`/credentials/summary?scan_id=${scanId}`));
+      setCreds(await api.listCredentials(scanId));
+      setSummary(await api.credentialSummary(scanId));
     } catch {}
   }
 
@@ -63,7 +64,7 @@ export default function CredentialsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {creds.map((c: any) => (
+                  {creds.map((c) => (
                     <tr key={c.id} className="border-b border-sentinel-border/30 hover:bg-sentinel-hover/50">
                       <td className="py-2.5 px-4 text-sm font-mono">{c.email}</td>
                       <td className="py-2.5 px-4 text-sm">{c.breach_count}</td>
