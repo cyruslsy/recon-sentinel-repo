@@ -155,11 +155,13 @@ services:
       - ALL
     cap_add:
       - NET_RAW
+      - SYS_ADMIN    # Required for headless Chromium (GoWitness screenshots)
     security_opt:
       - no-new-privileges:true
     read_only: true
     tmpfs:
-      - /tmp:size=100M
+      - /tmp:size=200M
+      - /dev/shm:size=256M
     deploy:
       resources:
         limits:

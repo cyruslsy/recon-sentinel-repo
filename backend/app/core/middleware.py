@@ -107,3 +107,33 @@ class AuditMiddleware(BaseHTTPMiddleware):
         """Extract first UUID from the path."""
         match = self.UUID_PATTERN.search(path)
         return match.group(1) if match else None
+
+
+class RLSMiddleware(BaseHTTPMiddleware):
+    """
+    Sets PostgreSQL RLS context (app.current_user_id) on every authenticated request.
+    Extracts user ID from JWT bearer token and stores it in request.state
+    so that get_db() sessions can apply row-level security policies.
+    
+    This runs BEFORE route handlers. If no valid JWT is present, the variable
+    is not set and RLS policies will use a null user ID (blocking all rows
+    except those visible to unauthenticated queries).
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        # Extract user ID from Authorization header if present
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            try:
+                from jose import jwt, JWTError
+                from app.core.config import get_settings
+                settings = get_settings()
+                payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+                user_id = payload.get("sub")
+                if user_id:
+                    request.state.rls_user_id = user_id
+            except Exception:
+                pass  # Invalid token — RLS stays unset (restrictive by default)
+
+        return await call_next(request)

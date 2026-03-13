@@ -95,7 +95,27 @@ class ScanOrchestrator:
         if phase:
             self.state.current_phase = phase
 
+        # Global safety limits
+        max_scan_duration_hours = 6
+        max_total_findings = 10000
+        scan_start = utc_now()
+
         while self.state.current_phase != "done":
+            # Check global timeout
+            elapsed = (utc_now() - scan_start).total_seconds()
+            if elapsed > max_scan_duration_hours * 3600:
+                logger.error(f"Scan {self.state.scan_id} exceeded {max_scan_duration_hours}h global timeout")
+                await self._update_scan(ScanPhase.DONE, ScanStatus.ERROR)
+                self.state.current_phase = "done"
+                break
+
+            # Check findings cap
+            if self.state.total_findings > max_total_findings:
+                logger.error(f"Scan {self.state.scan_id} exceeded {max_total_findings} findings cap")
+                await self._update_scan(ScanPhase.DONE, ScanStatus.COMPLETED)
+                self.state.current_phase = "done"
+                break
+
             current = self.state.current_phase
             self.state.phase_history.append(current)
             logger.info(f"Scan {self.state.scan_id}: phase '{current}'")
@@ -535,10 +555,10 @@ class ScanOrchestrator:
     def _clean_target(value: str) -> str | None:
         """
         Normalize a target value to a clean hostname.
-        'https://staging.example.com:8443/admin?x=1' → 'staging.example.com'
-        'api.example.com' → 'api.example.com'
-        'http://10.0.0.1' → '10.0.0.1'
+        Blocks internal/private IPs from being fanned out to agents.
         """
+        import ipaddress as _ipa
+
         clean = value.strip().lower()
 
         # Strip protocol
@@ -553,14 +573,23 @@ class ScanOrchestrator:
         # Strip port (agents will probe standard ports themselves)
         if ":" in clean:
             host_part = clean.rsplit(":", 1)[0]
-            # Keep it only if the remainder looks like a hostname/IP
             if host_part and ("." in host_part or host_part.replace(":", "").isdigit()):
                 clean = host_part
 
         clean = clean.strip(".")
-        if clean and ("." in clean or clean.replace(".", "").isdigit()):
-            return clean
-        return None
+
+        if not clean or ("." not in clean and not clean.replace(".", "").isdigit()):
+            return None
+
+        # Block private/internal IPs from fan-out targets
+        try:
+            ip = _ipa.ip_address(clean)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return None
+        except ValueError:
+            pass  # Not an IP — hostname is fine
+
+        return clean
 
     @staticmethod
     def _summarize_results(raw_results: list) -> list[dict]:

@@ -146,12 +146,16 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      - NET_RAW  # Required for Nmap SYN scan
+      - NET_RAW      # Required for Nmap SYN scan
+      - SYS_ADMIN    # Required for headless Chromium (GoWitness screenshots)
     security_opt:
       - no-new-privileges:true
+      # In production, use a Chrome seccomp profile:
+      # - seccomp=chrome-seccomp.json
     read_only: true
     tmpfs:
-      - /tmp:size=100M
+      - /tmp:size=200M
+      - /dev/shm:size=256M  # Chromium needs shared memory
 
   # ─── Celery Beat (scheduler) ───────────────────────────────
   celery-beat:
@@ -172,6 +176,20 @@ services:
     read_only: true
     tmpfs:
       - /tmp:size=10M
+
+  # ─── Celery Flower (task monitoring) ──────────────────────
+  flower:
+    image: mher/flower:2.0
+    container_name: sentinel-flower
+    restart: unless-stopped
+    command: celery flower --broker=redis://redis:6379/1 --port=5555 --basic_auth=admin:sentinel
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/1
+    ports:
+      - "5555:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
 
   # ─── Nginx (reverse proxy) ────────────────────────────────
   nginx:

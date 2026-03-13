@@ -117,6 +117,7 @@ class WebReconAgent(BaseAgent):
 
     async def _run_httpx(self, target: str) -> list[dict]:
         """Probe target for live HTTP services using httpx."""
+        from app.agents.evasion import random_ua
         cmd = [
             "httpx",
             "-u", target,
@@ -129,6 +130,7 @@ class WebReconAgent(BaseAgent):
             "-follow-redirects",
             "-timeout", "10",
             "-retries", "1",
+            "-H", f"User-Agent: {random_ua()}",
         ]
 
         try:

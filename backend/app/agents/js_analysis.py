@@ -106,6 +106,7 @@ class JSAnalysisAgent(BaseAgent):
     mitre_tags = ["T1552", "T1190"]
 
     async def execute(self) -> list[dict]:
+        from app.agents.evasion import random_ua
         findings = []
 
         # ─── Phase 1: Get live hosts from active phase ────────
@@ -193,7 +194,7 @@ class JSAnalysisAgent(BaseAgent):
         js_urls = set()
         try:
             async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-                resp = await client.get(host_url, headers={"User-Agent": "ReconSentinel/0.1"})
+                resp = await client.get(host_url, headers={"User-Agent": random_ua()})
                 if resp.status_code != 200:
                     return js_urls
 
@@ -219,7 +220,7 @@ class JSAnalysisAgent(BaseAgent):
         """Download a JS file. Skip if too large (>5MB)."""
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(url, headers={"User-Agent": "ReconSentinel/0.1"})
+                resp = await client.get(url, headers={"User-Agent": random_ua()})
                 if resp.status_code == 200 and len(resp.content) < 5_000_000:
                     return resp.text
         except Exception:

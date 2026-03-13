@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import init_db
-from app.core.middleware import AuditMiddleware
+from app.core.middleware import AuditMiddleware, RLSMiddleware
 from app.api.auth import router as auth_router
 from app.api.organizations import router as orgs_router
 from app.api.projects import router as projects_router
@@ -44,6 +44,9 @@ app = FastAPI(
 )
 
 # ─── Middleware ────────────────────────────────────────────────
+# RLS middleware: sets PostgreSQL session variable from JWT for row-level security
+app.add_middleware(RLSMiddleware)
+
 # Audit middleware (Amendment #21): logs all mutations + security events
 app.add_middleware(AuditMiddleware)
 

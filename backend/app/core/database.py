@@ -11,6 +11,7 @@ from sqlalchemy import MetaData, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from starlette.requests import Request
 
 from app.core.config import get_settings
 from app.core.tz import utc_now
@@ -64,10 +65,43 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
-async def get_db() -> AsyncSession:
-    """FastAPI dependency for database sessions."""
+async def get_db(request: Request = None) -> AsyncSession:
+    """
+    FastAPI dependency for database sessions.
+    Automatically sets RLS context (app.current_user_id) if the request
+    has been authenticated by RLSMiddleware.
+    """
     async with AsyncSessionLocal() as session:
         try:
+            # Set RLS context if user is authenticated
+            if request and hasattr(request, "state") and hasattr(request.state, "rls_user_id"):
+                await session.execute(
+                    text("SET LOCAL app.current_user_id = :uid"),
+                    {"uid": request.state.rls_user_id},
+                )
+            yield session
+        finally:
+            await session.close()
+
+
+async def get_db_with_rls(user_id: str) -> AsyncSession:
+    """
+    Database session with RLS context set.
+    Used by routes that need row-level security enforcement:
+    
+        from app.core.auth import get_current_user
+        
+        @router.get("/sensitive")
+        async def sensitive_data(user = Depends(get_current_user)):
+            async for db in get_db_with_rls(str(user.id)):
+                result = await db.execute(select(Finding))  # RLS filters automatically
+    """
+    async with AsyncSessionLocal() as session:
+        try:
+            await session.execute(
+                text("SET LOCAL app.current_user_id = :uid"),
+                {"uid": user_id},
+            )
             yield session
         finally:
             await session.close()

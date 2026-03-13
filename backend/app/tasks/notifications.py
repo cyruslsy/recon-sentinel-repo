@@ -41,14 +41,15 @@ logger = logging.getLogger(__name__)
 def _is_safe_url(url: str) -> tuple[bool, str]:
     """
     Validate a webhook URL is not targeting internal/private infrastructure.
-    Blocks: private IPs, localhost, link-local, cloud metadata, non-http schemes.
+    Blocks: private IPs (v4+v6), localhost, link-local, cloud metadata,
+    non-http schemes, DNS rebinding (resolves hostname to IP before check).
     """
     try:
         parsed = urlparse(url)
     except Exception:
         return False, "Invalid URL"
 
-    # Must be http or https
+    # Block dangerous schemes
     if parsed.scheme not in ("http", "https"):
         return False, f"Blocked scheme: {parsed.scheme}"
 
@@ -58,24 +59,89 @@ def _is_safe_url(url: str) -> tuple[bool, str]:
 
     # Block obvious internal hostnames
     blocked_hosts = {
-        "localhost", "127.0.0.1", "0.0.0.0", "::1",
+        "localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]",
         "metadata.google.internal", "metadata.google.com",
         "169.254.169.254",  # AWS/GCP metadata
         "100.100.100.200",  # Alibaba metadata
+        "fd00::1",          # IPv6 ULA
     }
-    if hostname.lower() in blocked_hosts:
+    if hostname.lower().strip("[]") in blocked_hosts:
         return False, f"Blocked host: {hostname}"
 
-    # Block private/reserved IP ranges
+    # Block internal TLDs
+    blocked_suffixes = (".internal", ".local", ".localhost", ".corp", ".home", ".lan")
+    if any(hostname.lower().endswith(s) for s in blocked_suffixes):
+        return False, f"Blocked internal hostname: {hostname}"
+
+    # Check if hostname is a raw IP (v4 or v6)
     try:
-        ip = ipaddress.ip_address(hostname)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-            return False, f"Blocked private/reserved IP: {hostname}"
+        ip = ipaddress.ip_address(hostname.strip("[]"))
+        safe, reason = _is_safe_ip(ip)
+        if not safe:
+            return False, reason
     except ValueError:
-        # Not an IP — it's a hostname, which is fine
-        # But block .internal and .local TLDs
-        if hostname.endswith(".internal") or hostname.endswith(".local"):
-            return False, f"Blocked internal hostname: {hostname}"
+        # Hostname, not IP — resolve to IP to prevent DNS rebinding
+        safe, reason = _resolve_and_check(hostname)
+        if not safe:
+            return False, reason
+
+    return True, ""
+
+
+def _is_safe_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> tuple[bool, str]:
+    """Check if a resolved IP address is safe to connect to."""
+    if ip.is_private:
+        return False, f"Blocked private IP: {ip}"
+    if ip.is_loopback:
+        return False, f"Blocked loopback: {ip}"
+    if ip.is_link_local:
+        return False, f"Blocked link-local: {ip}"
+    if ip.is_reserved:
+        return False, f"Blocked reserved IP: {ip}"
+    if ip.is_multicast:
+        return False, f"Blocked multicast: {ip}"
+
+    # IPv6-specific: block ULA (fc00::/7), mapped IPv4 (::ffff:0:0/96)
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped:
+            mapped = ip.ipv4_mapped
+            if mapped.is_private or mapped.is_loopback or mapped.is_link_local:
+                return False, f"Blocked IPv4-mapped IPv6: {ip}"
+
+    # Block cloud metadata ranges explicitly
+    try:
+        if ip in ipaddress.ip_network("169.254.0.0/16"):
+            return False, f"Blocked link-local/metadata: {ip}"
+    except Exception:
+        pass
+
+    return True, ""
+
+
+def _resolve_and_check(hostname: str) -> tuple[bool, str]:
+    """
+    Resolve hostname to IP BEFORE making the request (DNS rebinding protection).
+    Uses synchronous socket.getaddrinfo since this runs in a Celery worker
+    (not the FastAPI event loop). For FastAPI context, wrap in run_in_executor.
+    """
+    import socket
+    try:
+        results = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for family, _, _, _, sockaddr in results:
+            ip_str = sockaddr[0]
+            try:
+                ip = ipaddress.ip_address(ip_str)
+                safe, reason = _is_safe_ip(ip)
+                if not safe:
+                    return False, f"DNS resolves to blocked IP: {hostname} → {ip} ({reason})"
+            except ValueError:
+                continue
+    except socket.gaierror:
+        return False, f"DNS resolution failed: {hostname}"
+    except Exception as e:
+        return False, f"DNS check failed: {e}"
+
+    return True, ""
 
     return True, ""
 

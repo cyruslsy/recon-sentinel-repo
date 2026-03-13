@@ -10,6 +10,8 @@ Every agent inherits from this. Provides:
 """
 
 import asyncio
+import os
+import signal
 import uuid
 import json
 import logging
@@ -66,6 +68,32 @@ class BaseAgent(ABC):
         self.findings: list[dict] = []
         self.retry_count = 0
         self._progress = 0
+        self._active_processes: list = []  # Track child processes to kill on cancel
+
+    async def _kill_process_group(self, proc) -> None:
+        """Kill an entire process group to prevent orphaned child processes."""
+        try:
+            pgid = os.getpgid(proc.pid)
+            os.killpg(pgid, signal.SIGTERM)
+            # Give processes 5s to exit gracefully, then SIGKILL
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except (asyncio.TimeoutError, ProcessLookupError):
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+        except (ProcessLookupError, PermissionError):
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+
+    async def cleanup(self) -> None:
+        """Kill all active subprocesses. Called on task revocation or worker shutdown."""
+        for proc in self._active_processes:
+            await self._kill_process_group(proc)
+        self._active_processes.clear()
 
     # ─── Main Entry Point ─────────────────────────────────────
 
@@ -225,19 +253,31 @@ class BaseAgent(ABC):
         if not silent:
             await self.report_progress(self._progress, f"Running {tool_name}...")
 
+        proc = None
         try:
+            # Start subprocess in its own process group so we can kill the entire tree
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                start_new_session=True,  # Creates new process group — prevents orphans
             )
+            self._active_processes.append(proc)
+
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=timeout
             )
         except asyncio.TimeoutError:
-            proc.kill()
-            await proc.communicate()
+            if proc:
+                await self._kill_process_group(proc)
             raise TimeoutError(f"{tool_name} timed out after {timeout}s")
+        except asyncio.CancelledError:
+            if proc:
+                await self._kill_process_group(proc)
+            raise
+        finally:
+            if proc and proc in self._active_processes:
+                self._active_processes.remove(proc)
 
         result = {
             "stdout": stdout.decode("utf-8", errors="replace"),
@@ -315,9 +355,15 @@ class BaseAgent(ABC):
     # ─── Finding Creation ─────────────────────────────────────
 
     async def _create_findings(self, db: AsyncSession, raw_findings: list[dict]) -> list[Finding]:
-        """Create Finding records from the raw finding dicts returned by execute()."""
+        """
+        Create Finding records from the raw finding dicts returned by execute().
+        Batched writes: flushes every 50 findings to reduce lock contention
+        when 20+ agents write concurrently during fan-out.
+        """
         created = []
-        for f in raw_findings:
+        batch_size = 50
+
+        for i, f in enumerate(raw_findings):
             finding = Finding(
                 scan_id=uuid.UUID(self.scan_id),
                 agent_run_id=uuid.UUID(self.agent_run_id),
@@ -350,6 +396,13 @@ class BaseAgent(ABC):
                 await notify_critical_finding(self.scan_id, self.project_id, f)
             except Exception:
                 pass  # Notification failure must never block agent execution
+
+            # Batch flush to reduce lock contention
+            if (i + 1) % batch_size == 0:
+                await db.flush()
+
+        await db.commit()
+        return created
 
         await db.commit()
         return created

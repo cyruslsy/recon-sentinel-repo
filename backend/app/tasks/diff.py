@@ -154,6 +154,26 @@ async def _compute_diff(scan_id: str, prev_scan_id: str) -> dict:
             "finding_id": curr["id"],
         })
 
+    # ─── Capture scan config snapshots ───────────────────────
+    async with AsyncSessionLocal() as db:
+        current_scan = await db.get(Scan, scan_uuid)
+        prev_scan = await db.get(Scan, prev_uuid)
+        config_snapshot = {
+            "current": {
+                "profile": current_scan.profile.value if current_scan and current_scan.profile else "unknown",
+                "created_at": str(current_scan.created_at) if current_scan else None,
+            },
+            "previous": {
+                "profile": prev_scan.profile.value if prev_scan and prev_scan.profile else "unknown",
+                "created_at": str(prev_scan.created_at) if prev_scan else None,
+            },
+            "config_changed": bool(
+                current_scan and prev_scan and
+                (current_scan.profile.value if hasattr(current_scan.profile, 'value') else str(current_scan.profile))
+                != (prev_scan.profile.value if hasattr(prev_scan.profile, 'value') else str(prev_scan.profile))
+            ),
+        }
+
     # ─── Count by category ────────────────────────────────────
     new_by_type = _count_by_type(new_keys, current_map)
     removed_by_type = _count_by_type(removed_keys, previous_map)
