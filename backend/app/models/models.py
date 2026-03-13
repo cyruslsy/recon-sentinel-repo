@@ -383,6 +383,15 @@ class Finding(Base, TimestampMixin):
     )
     tags: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)  # FIX #10
 
+    # Pentester triage workflow
+    verification_status: Mapped[Optional[str]] = mapped_column(
+        String(20), default="unverified"  # unverified, confirmed, false_positive, disputed
+    )
+    severity_override: Mapped[Optional[str]] = mapped_column(
+        String(20)  # If set, overrides the scanner-assigned severity for reporting
+    )
+    severity_override_reason: Mapped[Optional[str]] = mapped_column(Text)
+
     # Deduplication
     fingerprint: Mapped[Optional[str]] = mapped_column(String(255))
     first_seen_scan: Mapped[Optional[uuid.UUID]] = mapped_column(

@@ -149,3 +149,91 @@ async def bulk_action(data: FindingBulkAction, user: User = Depends(get_current_
     
     await db.commit()
     return {"action": data.action, "affected": count, "total_requested": len(data.finding_ids)}
+
+
+@router.get("/export/csv")
+async def export_findings_csv(
+    scan_id: UUID,
+    severity: FindingSeverity | None = None,
+    finding_type: FindingType | None = None,
+    is_false_positive: bool | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Export findings as CSV. Pentesters need this for client deliverables mid-engagement."""
+    await authorize_scan(scan_id, user, db)
+
+    q = select(Finding).where(Finding.scan_id == scan_id).order_by(Finding.severity, Finding.created_at)
+    if severity:
+        q = q.where(Finding.severity == severity)
+    if finding_type:
+        q = q.where(Finding.finding_type == finding_type)
+    if is_false_positive is not None:
+        q = q.where(Finding.is_false_positive == is_false_positive)
+
+    result = await db.execute(q)
+    findings = result.scalars().all()
+
+    import csv
+    import io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "ID", "Severity", "Type", "Value", "Detail", "MITRE Techniques",
+        "Tags", "False Positive", "Verified", "Severity Override",
+        "User Notes", "Created At",
+    ])
+    for f in findings:
+        writer.writerow([
+            str(f.id),
+            f.severity.value if f.severity else "",
+            f.finding_type.value if f.finding_type else "",
+            f.value or "",
+            (f.detail or "")[:500],
+            ", ".join(f.mitre_technique_ids or []),
+            ", ".join(f.tags or []),
+            "Yes" if f.is_false_positive else "No",
+            getattr(f, "verification_status", "unverified") or "unverified",
+            getattr(f, "severity_override", "") or "",
+            getattr(f, "user_notes", "") or "",
+            str(f.created_at) if f.created_at else "",
+        ])
+
+    from fastapi.responses import StreamingResponse
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=findings-{scan_id}.csv"},
+    )
+
+
+@router.post("/{finding_id}/retest")
+async def retest_finding(finding_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Retest a single finding — dispatches a targeted Nuclei run for just that template+target.
+    Essential for post-remediation verification without rerunning the entire scan."""
+    finding = await authorize_finding(finding_id, user, db)
+
+    raw_data = finding.raw_data or {}
+    template_id = raw_data.get("template_id")
+    matched_at = raw_data.get("matched_at") or finding.value
+
+    if not template_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Finding has no template_id in raw_data — cannot retest. Only Nuclei-generated findings support retest.",
+        )
+
+    # Dispatch a targeted Nuclei retest via Celery
+    from app.core.celery_app import celery_app as _celery
+    _celery.send_task(
+        "app.tasks.maintenance.retest_single_finding",
+        args=[str(finding_id), str(finding.scan_id), template_id, matched_at],
+    )
+
+    return {
+        "status": "retest_queued",
+        "finding_id": str(finding_id),
+        "template": template_id,
+        "target": matched_at,
+    }

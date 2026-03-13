@@ -153,3 +153,73 @@ async def _enrich_target(target_id: str, target_value: str):
 
     logger.info(f"Target context enriched for {target_value}: {len(context.get('dns', {}).get('resolved_ips', []))} IPs")
     return context
+
+
+# ─── Single-Finding Retest ─────────────────────────────────────
+
+@celery_app.task(name="app.tasks.maintenance.retest_single_finding")
+def retest_single_finding(finding_id: str, scan_id: str, template_id: str, target_url: str):
+    """Retest a single Nuclei finding — runs the specific template against the specific target.
+    Used for post-remediation verification without rerunning the entire scan."""
+    import asyncio
+    return asyncio.run(_retest_finding(finding_id, scan_id, template_id, target_url))
+
+
+async def _retest_finding(finding_id: str, scan_id: str, template_id: str, target_url: str) -> dict:
+    """Run a targeted Nuclei scan for a single template+target and update the finding."""
+    import subprocess
+    import uuid
+    import json as _json
+    from app.core.database import AsyncSessionLocal
+    from app.models.models import Finding
+
+    if not target_url.startswith("http"):
+        target_url = f"https://{target_url}"
+
+    cmd = [
+        "nuclei",
+        "-u", target_url,
+        "-t", template_id,
+        "-json",
+        "-silent",
+        "-no-color",
+        "-timeout", "15",
+        "-retries", "2",
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        output = result.stdout.strip()
+    except (subprocess.TimeoutExpired, Exception) as e:
+        logger.error(f"Retest failed for finding {finding_id}: {e}")
+        return {"status": "error", "error": str(e)}
+
+    # Parse results
+    still_vulnerable = False
+    if output:
+        for line in output.split("\n"):
+            if line.strip():
+                try:
+                    parsed = _json.loads(line)
+                    if parsed.get("matched-at") or parsed.get("matchedAt"):
+                        still_vulnerable = True
+                        break
+                except _json.JSONDecodeError:
+                    continue
+
+    # Update finding in DB
+    async with AsyncSessionLocal() as db:
+        finding = await db.get(Finding, uuid.UUID(finding_id))
+        if finding:
+            from app.core.tz import utc_now
+            if still_vulnerable:
+                finding.verification_status = "confirmed"
+                finding.user_notes = (finding.user_notes or "") + f"\n[Retest {utc_now().isoformat()}] Still vulnerable."
+            else:
+                finding.verification_status = "remediated"
+                finding.user_notes = (finding.user_notes or "") + f"\n[Retest {utc_now().isoformat()}] No longer detected — likely remediated."
+            await db.commit()
+
+    status = "still_vulnerable" if still_vulnerable else "remediated"
+    logger.info(f"Retest finding {finding_id}: {status}")
+    return {"status": status, "finding_id": finding_id, "template": template_id, "target": target_url}

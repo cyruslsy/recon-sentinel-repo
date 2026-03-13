@@ -298,6 +298,9 @@ class FindingResponse(SentinelBase):
     assigned_to: Optional[uuid.UUID] = None
     tags: list[str] = []
     fingerprint: Optional[str] = None
+    verification_status: Optional[str] = "unverified"
+    severity_override: Optional[str] = None
+    severity_override_reason: Optional[str] = None
     created_at: datetime
 
 class FindingBrief(SentinelBase):
@@ -313,6 +316,9 @@ class FindingUpdate(BaseModel):
     user_notes: Optional[str] = None
     assigned_to: Optional[uuid.UUID] = None
     tags: Optional[list[str]] = None
+    verification_status: Optional[str] = None  # unverified, confirmed, false_positive, disputed
+    severity_override: Optional[str] = None     # critical, high, medium, low, info — overrides scanner severity
+    severity_override_reason: Optional[str] = None  # justification (e.g., "compensating control in place")
 
 class FindingBulkAction(BaseModel):
     finding_ids: list[uuid.UUID]

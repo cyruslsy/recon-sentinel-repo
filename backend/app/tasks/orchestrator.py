@@ -132,7 +132,12 @@ class ScanOrchestrator:
 
             if current == "passive":
                 await self._run_passive()
-                self.state.current_phase = "gate_1"
+                # Profile branching: passive_only stops after gate 1
+                if self.state.profile == "passive_only":
+                    self.state.current_phase = "report"
+                    logger.info("passive_only profile — skipping active/vuln phases, generating report")
+                else:
+                    self.state.current_phase = "gate_1"
 
             elif current == "gate_1":
                 await self._generate_gate(1)
@@ -141,7 +146,12 @@ class ScanOrchestrator:
 
             elif current == "active":
                 await self._run_active()
-                self.state.current_phase = "gate_2"
+                # Profile branching: quick skips gate 2 and goes straight to vuln
+                if self.state.profile == "quick":
+                    self.state.current_phase = "vuln"
+                    logger.info("quick profile — skipping gate 2, proceeding to vuln")
+                else:
+                    self.state.current_phase = "gate_2"
 
             elif current == "gate_2":
                 await self._generate_gate(2)
@@ -153,7 +163,11 @@ class ScanOrchestrator:
                 self.state.current_phase = "vuln"
 
             elif current == "vuln":
-                await self._run_vuln()
+                # Profile branching: stealth skips vuln phase entirely (no active probing)
+                if self.state.profile == "stealth":
+                    logger.info("stealth profile — skipping vulnerability scanning")
+                else:
+                    await self._run_vuln()
                 self.state.current_phase = "report"
 
             elif current == "report":
