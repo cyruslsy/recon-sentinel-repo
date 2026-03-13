@@ -11,6 +11,7 @@ Each pattern follows: detect(data) → diagnose() → correct(agent) → verify(
 """
 
 import logging
+from collections import Counter
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -227,6 +228,136 @@ class RedirectLoopDetector:
         return None
 
 
+
+
+# ─── Pattern 6: DNS Wildcard Detection ────────────────────────
+
+class DNSWildcardDetector:
+    """
+    Detects wildcard DNS records. If >90% of queried subdomains resolve
+    to the same IP, it's a wildcard. Filter findings by the wildcard IP.
+    """
+
+    @staticmethod
+    def detect(responses: list[dict]) -> CorrectionResult | None:
+        if len(responses) < 10:
+            return None
+        resolved_ips = [r.get("resolved_ip") for r in responses if r.get("resolved_ip")]
+        if len(resolved_ips) < 10:
+            return None
+        counter = Counter(resolved_ips)
+        most_common_ip, count = counter.most_common(1)[0]
+        ratio = count / len(resolved_ips)
+        if ratio > 0.90:
+            return CorrectionResult(
+                detected=True, pattern="dns_wildcard",
+                detail=f"{ratio:.0%} of subdomains resolve to {most_common_ip}. Wildcard DNS.",
+                corrected_params={"wildcard_ip": most_common_ip, "filter_ip": most_common_ip},
+            )
+        return None
+
+
+# ─── Pattern 7: Timeout Cascade ───────────────────────────────
+
+class TimeoutCascadeDetector:
+    """Detects >50% timeout rate — target unreachable or aggressive firewall."""
+
+    @staticmethod
+    def detect(responses: list[dict]) -> CorrectionResult | None:
+        if len(responses) < 5:
+            return None
+        timeouts = sum(1 for r in responses if r.get("timed_out") or r.get("error") == "timeout")
+        ratio = timeouts / len(responses)
+        if ratio > 0.50:
+            return CorrectionResult(
+                detected=True, pattern="timeout_cascade",
+                detail=f"{ratio:.0%} requests timed out. Reducing concurrency.",
+                corrected_params={"reduce_concurrency": True, "timeout_multiplier": 3},
+            )
+        return None
+
+
+# ─── Pattern 8: Connection Reset ──────────────────────────────
+
+class ConnectionResetDetector:
+    """Detects TCP RST floods — firewall actively rejecting connections."""
+
+    @staticmethod
+    def detect(responses: list[dict]) -> CorrectionResult | None:
+        if len(responses) < 5:
+            return None
+        resets = sum(1 for r in responses if r.get("error") in ("connection_reset", "ConnectionResetError", "ECONNRESET"))
+        ratio = resets / len(responses)
+        if ratio > 0.40:
+            return CorrectionResult(
+                detected=True, pattern="connection_reset",
+                detail=f"{ratio:.0%} connections reset. Adding inter-request delay.",
+                corrected_params={"delay_seconds": 2.0, "max_threads": 1},
+            )
+        return None
+
+
+# ─── Pattern 9: Empty Response ────────────────────────────────
+
+class EmptyResponseDetector:
+    """Detects empty 200 responses — honeypot, tarpit, or LB misconfiguration."""
+
+    @staticmethod
+    def detect(responses: list[dict]) -> CorrectionResult | None:
+        if len(responses) < 10:
+            return None
+        empty = sum(1 for r in responses if r.get("content_length", -1) == 0 and r.get("status", 0) == 200)
+        ratio = empty / len(responses)
+        if ratio > 0.80:
+            return CorrectionResult(
+                detected=True, pattern="empty_response",
+                detail=f"{ratio:.0%} of 200 responses have empty body. Possible honeypot.",
+                corrected_params={"reduce_depth": True, "flag_suspicious": True},
+            )
+        return None
+
+
+# ─── Pattern 10: Certificate Validation Error ─────────────────
+
+class CertErrorDetector:
+    """Detects SSL cert errors — retry with verification disabled."""
+
+    @staticmethod
+    def detect(responses: list[dict]) -> CorrectionResult | None:
+        if len(responses) < 3:
+            return None
+        cert_errors = sum(1 for r in responses if r.get("error") in (
+            "ssl_error", "certificate_verify_failed", "CERTIFICATE_VERIFY_FAILED"))
+        ratio = cert_errors / len(responses)
+        if ratio > 0.50:
+            return CorrectionResult(
+                detected=True, pattern="cert_error",
+                detail=f"{ratio:.0%} cert errors. Retrying with verification disabled.",
+                corrected_params={"verify_ssl": False},
+            )
+        return None
+
+
+# ─── Pattern 11: Encoding Mismatch ────────────────────────────
+
+class EncodingMismatchDetector:
+    """Detects encoding failures — force UTF-8 with error replacement."""
+
+    @staticmethod
+    def detect(responses: list[dict]) -> CorrectionResult | None:
+        if len(responses) < 5:
+            return None
+        errors = sum(1 for r in responses if r.get("error") in ("encoding_error", "UnicodeDecodeError"))
+        ratio = errors / len(responses)
+        if ratio > 0.30:
+            return CorrectionResult(
+                detected=True, pattern="encoding_mismatch",
+                detail=f"{ratio:.0%} encoding errors. Forcing UTF-8.",
+                corrected_params={"force_encoding": "utf-8", "errors": "replace"},
+            )
+        return None
+
+
 # ─── Convenience: Run All Detectors ───────────────────────────
 
 ALL_DETECTORS = [
@@ -235,6 +366,12 @@ ALL_DETECTORS = [
     WAFDetector,
     RateLimitDetector,
     RedirectLoopDetector,
+    DNSWildcardDetector,
+    TimeoutCascadeDetector,
+    ConnectionResetDetector,
+    EmptyResponseDetector,
+    CertErrorDetector,
+    EncodingMismatchDetector,
 ]
 
 

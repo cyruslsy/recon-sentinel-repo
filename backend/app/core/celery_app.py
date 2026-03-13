@@ -88,6 +88,9 @@ celery_app.conf.update(
         "app.agents.cloud.*":         {"queue": "cloud"},
         "app.agents.historical.*":    {"queue": "historical"},
         "app.agents.js_analysis.*":   {"queue": "js_analysis"},
+        "app.agents.wayback.*":       {"queue": "historical"},
+        "app.agents.github_dork.*":   {"queue": "osint"},
+        "app.agents.subdomain_takeover.*": {"queue": "vuln"},
         # Report generation and notifications on default queue
         "app.tasks.reports.*":        {"queue": "default"},
         "app.tasks.notifications.*":  {"queue": "default"},

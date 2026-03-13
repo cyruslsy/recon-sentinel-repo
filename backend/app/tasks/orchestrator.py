@@ -198,6 +198,8 @@ class ScanOrchestrator:
             "app.agents.email_sec.run_email_sec_agent",
             "app.agents.threat_intel.run_threat_intel_agent",
             "app.agents.cred_leak.run_cred_leak_agent",
+            "app.agents.wayback.run_wayback_agent",
+            "app.agents.github_dork.run_github_dork_agent",
         ]
         raw = await self._dispatch_agents(agents)
         self.state.passive_results = self._summarize_results(raw)
@@ -232,6 +234,7 @@ class ScanOrchestrator:
 
         domain_level_agents = [
             "app.agents.cloud.run_cloud_agent",
+            "app.agents.waf.run_waf_agent",
         ]
 
         # Apply gate 1 modifications (user may skip certain agents)

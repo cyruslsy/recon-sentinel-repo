@@ -82,6 +82,10 @@ class FindingType(str, enum.Enum):
     SCREENSHOT = "screenshot"
     OSINT = "osint"
     WAF = "waf"
+    WAF_DETECTION = "waf_detection"
+    HISTORICAL = "historical"
+    TECH_STACK = "tech_stack"
+    GITHUB_LEAK = "github_leak"
     OTHER = "other"
 
 
