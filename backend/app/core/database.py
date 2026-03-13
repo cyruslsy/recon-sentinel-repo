@@ -55,8 +55,12 @@ _settings = get_settings()
 engine = create_async_engine(
     _settings.DATABASE_URL,
     echo=False,
-    pool_size=40,          # Support 10+ concurrent scans
-    max_overflow=20,       # Burst capacity
+    # Pool sizing: PostgreSQL default max_connections=100.
+    # With 4 Celery workers + 1 FastAPI process = 5 processes sharing the pool.
+    # 5 × (pool_size + max_overflow) must be < max_connections.
+    # 5 × (10 + 5) = 75, leaving 25 for admin/monitoring connections.
+    pool_size=10,
+    max_overflow=5,
     pool_pre_ping=True,
     pool_timeout=30,       # Seconds to wait for a connection before error
     pool_recycle=1800,     # Recycle connections every 30 min (prevent stale)

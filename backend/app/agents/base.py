@@ -184,7 +184,9 @@ class BaseAgent(ABC):
         retry_count: int | None = None,
         last_log_line: str | None = None,
     ) -> None:
-        """Update agent_run record with short-lived session."""
+        """Update agent_run record with short-lived session.
+        This is the ONLY DB write for progress — called once on completion/error.
+        Persists the final state that was tracked via Redis-only during execution."""
         async with AsyncSessionLocal() as db:
             agent_run = await db.get(AgentRun, uuid.UUID(self.agent_run_id))
             if agent_run:
@@ -199,8 +201,14 @@ class BaseAgent(ABC):
                     agent_run.progress_pct = 100
                 if retry_count is not None:
                     agent_run.retry_count = retry_count
+                # Persist final log line: use explicit param or last Redis-tracked value
                 if last_log_line is not None:
                     agent_run.last_log_line = last_log_line
+                elif hasattr(self, '_last_log_line') and self._last_log_line:
+                    agent_run.last_log_line = self._last_log_line
+                # Persist final tool state
+                if hasattr(self, '_current_tool') and self._current_tool:
+                    agent_run.current_tool = self._current_tool
                 await db.commit()
 
     # ─── Abstract: Subclass Must Implement ────────────────────
@@ -298,18 +306,22 @@ class BaseAgent(ABC):
     # ─── Progress Reporting ───────────────────────────────────
 
     async def report_progress(self, pct: int, message: str = "") -> None:
-        """Update progress and broadcast to WebSocket clients."""
+        """Update progress via Redis pub/sub only (no DB write).
+
+        Previous implementation wrote to DB on every progress update, causing
+        ~420 DB round-trips per 5-target scan (70 agents × 6 calls each).
+        With pool_size=60, this caused connection pool exhaustion under load.
+
+        Now: progress goes to Redis → WebSocket only. DB is updated once on
+        agent completion in _update_agent_run().
+        """
         self._progress = min(pct, 100)
+        self._last_log_line = message
+        self._current_tool = message.split("Running ")[-1].rstrip("...") if "Running" in message else None
 
         if self.agent_run_id:
-            async with AsyncSessionLocal() as db:
-                agent_run = await db.get(AgentRun, uuid.UUID(self.agent_run_id))
-                if agent_run:
-                    agent_run.progress_pct = self._progress
-                    agent_run.last_log_line = message
-                    agent_run.current_tool = message.split("Running ")[-1].rstrip("...") if "Running" in message else None
-                    await db.commit()
-
+            # Redis pub/sub only — WebSocket clients get real-time updates
+            # without DB pressure
             await self._broadcast("agent.status", {
                 "agent_run_id": self.agent_run_id,
                 "status": "running",

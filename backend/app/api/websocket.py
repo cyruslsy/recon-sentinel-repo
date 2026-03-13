@@ -141,6 +141,13 @@ async def scan_websocket(websocket: WebSocket, scan_id: str, token: str | None =
     
     except WebSocketDisconnect:
         manager.disconnect(websocket, scan_id)
+    except Exception as e:
+        # Catch all exceptions (network drops, client crashes, etc.)
+        # Without this, unclean disconnects leave the WebSocket in manager.active
+        # and any Redis subscriptions leak
+        import logging
+        logging.getLogger(__name__).debug(f"WebSocket error for scan {scan_id}: {e}")
+        manager.disconnect(websocket, scan_id)
 
 
 @router.websocket("/chat/{session_id}")

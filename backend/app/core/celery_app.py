@@ -59,6 +59,17 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,     # Re-queue on worker death
     task_track_started=True,             # Track running state
 
+    # Task time limits — prevents permanently consumed worker slots
+    # soft_time_limit sends SoftTimeLimitExceeded (agent can cleanup)
+    # task_time_limit force-kills the task (last resort)
+    task_soft_time_limit=1800,           # 30 min soft limit (agents can catch and cleanup)
+    task_time_limit=2100,                # 35 min hard kill (5 min grace after soft)
+
+    # Worker memory protection — restart worker after processing N tasks
+    # Prevents slow memory leaks from accumulating over days
+    worker_max_tasks_per_child=50,       # Restart after 50 tasks
+    worker_max_memory_per_child=512000,  # Restart if worker exceeds 512MB RSS (KB)
+
     # Broker connection resilience
     broker_connection_retry_on_startup=True,
     broker_connection_retry=True,
