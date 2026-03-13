@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" fill="none">
+  <defs>
+    <linearGradient id="hbg" x1="0" y1="0" x2="960" y2="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a0e17"/>
+      <stop offset="100%" stop-color="#0d1321"/>
+    </linearGradient>
+  </defs>
+  <!-- Window chrome -->
+  <rect width="960" height="520" rx="10" fill="url(#hbg)" stroke="#1e2a3a" stroke-width="1"/>
+  <rect width="960" height="32" rx="10" fill="#111827"/>
+  <rect y="22" width="960" height="10" fill="#111827"/>
+  <circle cx="18" cy="16" r="5" fill="#ef4444" opacity="0.8"/>
+  <circle cx="36" cy="16" r="5" fill="#f59e0b" opacity="0.8"/>
+  <circle cx="54" cy="16" r="5" fill="#22c55e" opacity="0.8"/>
+  <text x="480" y="20" text-anchor="middle" font-family="system-ui" font-size="11" fill="#64748b">Recon Sentinel — Health Feed</text>
+
+  <!-- Header -->
+  <text x="40" y="66" font-family="system-ui" font-size="16" font-weight="700" fill="#e2e8f0">Agent Health Feed</text>
+  <text x="40" y="82" font-family="system-ui" font-size="10" fill="#64748b">Self-correction timeline — agents detect anomalies, auto-fix, and escalate when needed</text>
+
+  <!-- Filter tabs -->
+  <rect x="40" y="94" width="260" height="28" rx="6" fill="#0d1321"/>
+  <rect x="44" y="98" width="42" height="20" rx="4" fill="#111827"/>
+  <text x="54" y="112" font-family="monospace" font-size="9" fill="#e2e8f0" font-weight="600">All</text>
+  <text x="102" y="112" font-family="monospace" font-size="9" fill="#64748b">Anomalies</text>
+  <text x="170" y="112" font-family="monospace" font-size="9" fill="#64748b">Corrections</text>
+  <text x="248" y="112" font-family="monospace" font-size="9" fill="#64748b">Action</text>
+
+  <!-- Timeline line -->
+  <line x1="65" y1="136" x2="65" y2="500" stroke="#1e2a3a" stroke-width="1"/>
+
+  <!-- Event 1: Anomaly Detected -->
+  <circle cx="65" cy="152" r="10" fill="rgba(245,158,11,0.15)" stroke="#1e2a3a" stroke-width="1"/>
+  <text x="62" y="156" font-family="system-ui" font-size="10" fill="#f59e0b" text-anchor="middle">⚠</text>
+  <rect x="88" y="136" width="830" height="62" rx="8" fill="#111827" stroke="#1e2a3a" stroke-width="1"/>
+  <rect x="96" y="144" width="120" height="16" rx="3" fill="rgba(245,158,11,0.1)"/>
+  <text x="104" y="155" font-family="monospace" font-size="8" fill="#f59e0b" font-weight="600">ANOMALY DETECTED</text>
+  <text x="224" y="155" font-family="monospace" font-size="8" fill="#64748b">📂 Dir/File Discovery · 14:32:07</text>
+  <text x="96" y="174" font-family="system-ui" font-size="10" fill="#e2e8f0">Custom 404 Detected — Target returns HTTP 200 with identical 4,242-byte response for all non-existent paths</text>
+  <text x="96" y="190" font-family="monospace" font-size="8" fill="#475569">ffuf -w wordlist.txt -u https://target.com/FUZZ → 847/850 hits, all size:4242</text>
+
+  <!-- Event 2: Self-Correction -->
+  <circle cx="65" cy="222" r="10" fill="rgba(59,130,246,0.15)" stroke="#1e2a3a" stroke-width="1"/>
+  <text x="62" y="226" font-family="system-ui" font-size="10" fill="#3b82f6" text-anchor="middle">⟳</text>
+  <rect x="88" y="206" width="830" height="62" rx="8" fill="#111827" stroke="#1e2a3a" stroke-width="1"/>
+  <rect x="96" y="214" width="120" height="16" rx="3" fill="rgba(59,130,246,0.1)"/>
+  <text x="104" y="225" font-family="monospace" font-size="8" fill="#3b82f6" font-weight="600">SELF-CORRECTING</text>
+  <text x="224" y="225" font-family="monospace" font-size="8" fill="#64748b">📂 Dir/File Discovery · 14:32:08</text>
+  <text x="96" y="244" font-family="system-ui" font-size="10" fill="#e2e8f0">Auto-Fix: Fingerprinting 404 page, filtering by response hash, re-running with calibrated filter</text>
+  <text x="96" y="260" font-family="monospace" font-size="8" fill="#475569">ffuf -fw 4242 -fc 200 → re-running with content-length filter</text>
+
+  <!-- Event 3: Correction Success -->
+  <circle cx="65" cy="292" r="10" fill="rgba(34,197,94,0.15)" stroke="#1e2a3a" stroke-width="1"/>
+  <text x="62" y="296" font-family="system-ui" font-size="10" fill="#22c55e" text-anchor="middle">✓</text>
+  <rect x="88" y="276" width="830" height="52" rx="8" fill="#111827" stroke="#1e2a3a" stroke-width="1"/>
+  <rect x="96" y="284" width="150" height="16" rx="3" fill="rgba(34,197,94,0.1)"/>
+  <text x="104" y="295" font-family="monospace" font-size="8" fill="#22c55e" font-weight="600">CORRECTION SUCCESSFUL</text>
+  <text x="254" y="295" font-family="monospace" font-size="8" fill="#64748b">📂 Dir/File Discovery · 14:32:45</text>
+  <text x="96" y="314" font-family="system-ui" font-size="10" fill="#e2e8f0">Self-Correction Successful — 12 real directories found after filtering 847 false positives</text>
+
+  <!-- Event 4: Rate Limit Anomaly -->
+  <circle cx="65" cy="352" r="10" fill="rgba(245,158,11,0.15)" stroke="#1e2a3a" stroke-width="1"/>
+  <text x="62" y="356" font-family="system-ui" font-size="10" fill="#f59e0b" text-anchor="middle">⚠</text>
+  <rect x="88" y="336" width="830" height="52" rx="8" fill="#111827" stroke="#1e2a3a" stroke-width="1"/>
+  <rect x="96" y="344" width="120" height="16" rx="3" fill="rgba(245,158,11,0.1)"/>
+  <text x="104" y="355" font-family="monospace" font-size="8" fill="#f59e0b" font-weight="600">ANOMALY DETECTED</text>
+  <text x="224" y="355" font-family="monospace" font-size="8" fill="#64748b">🔑 Credential Leak Agent · 14:25:01</text>
+  <text x="96" y="374" font-family="system-ui" font-size="10" fill="#e2e8f0">DeHashed API Rate Limited (429) — Hit rate limit after 15 queries. 19 more emails pending.</text>
+
+  <!-- Event 5: Escalation -->
+  <circle cx="65" cy="412" r="10" fill="rgba(239,68,68,0.15)" stroke="#1e2a3a" stroke-width="1"/>
+  <text x="62" y="416" font-family="system-ui" font-size="10" fill="#ef4444" text-anchor="middle">!</text>
+  <rect x="88" y="396" width="830" height="80" rx="8" fill="#111827" stroke="rgba(239,68,68,0.3)" stroke-width="1"/>
+  <rect x="96" y="404" width="140" height="16" rx="3" fill="rgba(239,68,68,0.1)"/>
+  <text x="104" y="415" font-family="monospace" font-size="8" fill="#ef4444" font-weight="600">CRITICAL — USER ACTION</text>
+  <text x="244" y="415" font-family="monospace" font-size="8" fill="#64748b">🛡️ Vulnerability Agent · 14:35:22</text>
+  <text x="96" y="434" font-family="system-ui" font-size="10" fill="#e2e8f0">WAF blocking Nuclei scan on 3 hosts — auto-fix attempts (rate reduction, UA rotation) failed</text>
+  <text x="96" y="450" font-family="monospace" font-size="8" fill="#475569">admin.target.com, api.target.com, staging.target.com — Cloudflare active blocking</text>
+  <!-- Action buttons -->
+  <rect x="96" y="458" width="80" height="16" rx="3" fill="#22c55e"/>
+  <text x="114" y="469" font-family="system-ui" font-size="8" fill="white" font-weight="600">Skip hosts</text>
+  <rect x="184" y="458" width="96" height="16" rx="3" fill="#f59e0b"/>
+  <text x="198" y="469" font-family="system-ui" font-size="8" fill="white" font-weight="600">Reduce rate</text>
+  <rect x="288" y="458" width="70" height="16" rx="3" fill="#1e2a3a"/>
+  <text x="302" y="469" font-family="system-ui" font-size="8" fill="#64748b" font-weight="600">Abort</text>
+</svg>

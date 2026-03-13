@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 580" fill="none">
+  <defs>
+    <linearGradient id="dbg" x1="0" y1="0" x2="960" y2="580" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a0e17"/>
+      <stop offset="100%" stop-color="#0d1321"/>
+    </linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <!-- Window chrome -->
+  <rect width="960" height="580" rx="10" fill="url(#dbg)" stroke="#1e2a3a" stroke-width="1"/>
+  <rect width="960" height="32" rx="10" fill="#111827"/>
+  <rect y="22" width="960" height="10" fill="#111827"/>
+  <circle cx="18" cy="16" r="5" fill="#ef4444" opacity="0.8"/>
+  <circle cx="36" cy="16" r="5" fill="#f59e0b" opacity="0.8"/>
+  <circle cx="54" cy="16" r="5" fill="#22c55e" opacity="0.8"/>
+  <text x="480" y="20" text-anchor="middle" font-family="system-ui" font-size="11" fill="#64748b">Recon Sentinel — Dashboard</text>
+
+  <!-- Sidebar -->
+  <rect x="0" y="32" width="180" height="548" fill="#111827" rx="0"/>
+  <rect x="0" y="32" width="180" height="548" fill="#111827"/>
+  <!-- Logo -->
+  <circle cx="28" cy="56" r="8" fill="none" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="44" y="60" font-family="system-ui" font-size="13" font-weight="700" fill="#e2e8f0">Recon Sentinel</text>
+  <!-- Nav items -->
+  <rect x="8" y="78" width="164" height="30" rx="6" fill="rgba(59,130,246,0.1)"/>
+  <text x="40" y="97" font-family="system-ui" font-size="11" fill="#3b82f6">◉ Dashboard</text>
+  <text x="40" y="123" font-family="system-ui" font-size="11" fill="#64748b">⟐ Scans</text>
+  <text x="40" y="147" font-family="system-ui" font-size="11" fill="#64748b">⚡ Agents</text>
+  <text x="40" y="171" font-family="system-ui" font-size="11" fill="#64748b">♡ Health Feed</text>
+  <text x="155" y="171" font-family="system-ui" font-size="9" fill="#ef4444" font-weight="600">2</text>
+  <text x="40" y="195" font-family="system-ui" font-size="11" fill="#64748b">🎯 Findings</text>
+  <text x="40" y="219" font-family="system-ui" font-size="11" fill="#64748b">⬡ MITRE ATT&amp;CK</text>
+  <text x="40" y="243" font-family="system-ui" font-size="11" fill="#64748b">🔑 Credentials</text>
+  <text x="40" y="267" font-family="system-ui" font-size="11" fill="#64748b">◎ Scope</text>
+  <text x="40" y="291" font-family="system-ui" font-size="11" fill="#64748b">📄 Reports</text>
+  <text x="40" y="315" font-family="system-ui" font-size="11" fill="#64748b">🔄 Scan Diff</text>
+  <text x="40" y="339" font-family="system-ui" font-size="11" fill="#64748b">💬 AI Copilot</text>
+  <text x="40" y="363" font-family="system-ui" font-size="11" fill="#64748b">⚙ Settings</text>
+
+  <!-- Main content area -->
+  <!-- Stat cards row -->
+  <rect x="196" y="46" width="175" height="72" rx="8" fill="#111827" stroke="#1e2a3a" stroke-width="1"/>
+  <text x="212" y="68" font-family="monospace" font-size="9" fill="#64748b" font-weight="600">SUBDOMAINS</text>
+  <text x="212" y="98" font-family="monospace" font-size="28" fill="#06b6d4" font-weight="700" filter="url(#glow)">47</text>
+
+  <rect x="383" y="46" width="175" height="72" rx="8" fill="#111827" stroke="#1e2a3a" stroke-width="1"/>
+  <text x="399" y="68" font-family="monospace" font-size="9" fill="#64748b" font-weight="600">OPEN PORTS</text>
+  <text x="399" y="98" font-family="monospace" font-size="28" fill="#3b82f6" font-weight="700">23</text>
+
+  <rect x="570" y="46" width="175" height="72" rx="8" fill="#111827" stroke="#1e2a3a" stroke-width="1"/>
+  <text x="586" y="68" font-family="monospace" font-size="9" fill="#64748b" font-weight="600">VULNERABILITIES</text>
+  <text x="586" y="98" font-family="monospace" font-size="28" fill="#ef4444" font-weight="700">18</text>
+  <text x="628" y="98" font-family="monospace" font-size="11" fill="#f59e0b">↑3</text>
+
+  <rect x="757" y="46" width="175" height="72" rx="8" fill="#111827" stroke="#1e2a3a" stroke-width="1"/>
+  <text x="773" y="68" font-family="monospace" font-size="9" fill="#64748b" font-weight="600">LEAKED CREDS</text>
+  <text x="773" y="98" font-family="monospace" font-size="28" fill="#f59e0b" font-weight="700">34</text>
+
+  <!-- Agent Status panel -->
+  <rect x="196" y="132" width="360" height="220" rx="8" fill="#111827" stroke="#1e2a3a" stroke-width="1"/>
+  <text x="212" y="154" font-family="monospace" font-size="10" fill="#e2e8f0" font-weight="700">AGENT STATUS</text>
+  <!-- Agent rows -->
+  <rect x="204" y="164" width="344" height="24" rx="4" fill="#0d1321"/>
+  <text x="212" y="180" font-family="monospace" font-size="9" fill="#e2e8f0">🌐 Subdomain Agent</text>
+  <rect x="390" y="170" width="40" height="12" rx="2" fill="rgba(34,197,94,0.15)"/>
+  <text x="395" y="179" font-family="monospace" font-size="8" fill="#22c55e" font-weight="600">DONE</text>
+  <text x="530" y="180" font-family="monospace" font-size="10" fill="#e2e8f0" font-weight="700">47</text>
+
+  <rect x="204" y="192" width="344" height="24" rx="4" fill="#0d1321"/>
+  <text x="212" y="208" font-family="monospace" font-size="9" fill="#e2e8f0">🔌 Port &amp; Service</text>
+  <rect x="390" y="198" width="50" height="12" rx="2" fill="rgba(59,130,246,0.15)"/>
+  <text x="395" y="207" font-family="monospace" font-size="8" fill="#3b82f6" font-weight="600">● RUN</text>
+  <text x="530" y="208" font-family="monospace" font-size="10" fill="#e2e8f0" font-weight="700">23</text>
+
+  <rect x="204" y="220" width="344" height="24" rx="4" fill="#0d1321"/>
+  <text x="212" y="236" font-family="monospace" font-size="9" fill="#e2e8f0">📂 Dir/File Discovery</text>
+  <rect x="390" y="226" width="70" height="12" rx="2" fill="rgba(6,182,212,0.15)"/>
+  <text x="395" y="235" font-family="monospace" font-size="8" fill="#06b6d4" font-weight="600">SELF-FIXED</text>
+  <text x="530" y="236" font-family="monospace" font-size="10" fill="#e2e8f0" font-weight="700">12</text>
+
+  <rect x="204" y="248" width="344" height="24" rx="4" fill="#0d1321"/>
+  <text x="212" y="264" font-family="monospace" font-size="9" fill="#e2e8f0">🔑 Credential Leak</text>
+  <rect x="390" y="254" width="40" height="12" rx="2" fill="rgba(34,197,94,0.15)"/>
+  <text x="395" y="263" font-family="monospace" font-size="8" fill="#22c55e" font-weight="600">DONE</text>
+  <text x="530" y="264" font-family="monospace" font-size="10" fill="#e2e8f0" font-weight="700">34</text>
+
+  <rect x="204" y="276" width="344" height="24" rx="4" fill="#0d1321"/>
+  <text x="212" y="292" font-family="monospace" font-size="9" fill="#e2e8f0">🛡️ Vulnerability</text>
+  <rect x="390" y="282" width="65" height="12" rx="2" fill="rgba(239,68,68,0.15)"/>
+  <text x="395" y="291" font-family="monospace" font-size="8" fill="#ef4444" font-weight="600">⚠ ACTION</text>
+  <text x="530" y="292" font-family="monospace" font-size="10" fill="#e2e8f0" font-weight="700">18</text>
+
+  <rect x="204" y="304" width="344" height="24" rx="4" fill="#0d1321"/>
+  <text x="212" y="320" font-family="monospace" font-size="9" fill="#e2e8f0">🎯 Threat Intel</text>
+  <rect x="390" y="310" width="40" height="12" rx="2" fill="rgba(34,197,94,0.15)"/>
+  <text x="395" y="319" font-family="monospace" font-size="8" fill="#22c55e" font-weight="600">DONE</text>
+  <text x="530" y="320" font-family="monospace" font-size="10" fill="#e2e8f0" font-weight="700">15</text>
+
+  <!-- Health Feed mini panel -->
+  <rect x="570" y="132" width="362" height="220" rx="8" fill="#111827" stroke="#1e2a3a" stroke-width="1"/>
+  <text x="586" y="154" font-family="monospace" font-size="10" fill="#e2e8f0" font-weight="700">RECENT AGENT CORRECTIONS</text>
+
+  <!-- Health events -->
+  <rect x="578" y="164" width="346" height="40" rx="4" fill="#0d1321" stroke="rgba(34,197,94,0.3)" stroke-width="1"/>
+  <rect x="578" y="164" width="3" height="40" rx="1" fill="#22c55e"/>
+  <text x="590" y="178" font-family="monospace" font-size="8" fill="#22c55e" font-weight="600">✓ SELF-CORRECTION SUCCESSFUL</text>
+  <text x="590" y="194" font-family="monospace" font-size="8" fill="#94a3b8">Custom 404 filtered — 12 real dirs from 847 hits</text>
+
+  <rect x="578" y="210" width="346" height="40" rx="4" fill="#0d1321" stroke="rgba(6,182,212,0.3)" stroke-width="1"/>
+  <rect x="578" y="210" width="3" height="40" rx="1" fill="#06b6d4"/>
+  <text x="590" y="224" font-family="monospace" font-size="8" fill="#06b6d4" font-weight="600">⟳ AUTO-FIX APPLIED</text>
+  <text x="590" y="240" font-family="monospace" font-size="8" fill="#94a3b8">DeHashed rate-limited → failover to LeakCheck API</text>
+
+  <rect x="578" y="256" width="346" height="40" rx="4" fill="#0d1321" stroke="rgba(239,68,68,0.3)" stroke-width="1"/>
+  <rect x="578" y="256" width="3" height="40" rx="1" fill="#ef4444"/>
+  <text x="590" y="270" font-family="monospace" font-size="8" fill="#ef4444" font-weight="600">! CRITICAL — NEEDS HUMAN ACTION</text>
+  <text x="590" y="286" font-family="monospace" font-size="8" fill="#94a3b8">WAF blocking Nuclei on 3 hosts — auto-fix failed</text>
+
+  <rect x="578" y="302" width="346" height="40" rx="4" fill="#0d1321" stroke="rgba(34,197,94,0.3)" stroke-width="1"/>
+  <rect x="578" y="302" width="3" height="40" rx="1" fill="#22c55e"/>
+  <text x="590" y="316" font-family="monospace" font-size="8" fill="#22c55e" font-weight="600">✓ WILDCARD DNS FILTERED</text>
+  <text x="590" y="332" font-family="monospace" font-size="8" fill="#94a3b8">2,340 wildcards → 47 real subdomains via response diff</text>
+
+  <!-- Approval Gate Banner -->
+  <rect x="196" y="366" width="736" height="80" rx="8" fill="rgba(59,130,246,0.08)" stroke="rgba(59,130,246,0.3)" stroke-width="1"/>
+  <text x="220" y="390" font-family="system-ui" font-size="18">🛡️</text>
+  <text x="248" y="390" font-family="system-ui" font-size="12" font-weight="700" fill="#3b82f6">Approval Gate 1 — Human Decision Required</text>
+  <text x="248" y="408" font-family="system-ui" font-size="10" fill="#94a3b8">47 subdomains, 34 credential leaks (4 plaintext). 3 services outdated. AI recommends proceeding with active scan.</text>
+  <rect x="248" y="420" width="70" height="22" rx="4" fill="#22c55e"/>
+  <text x="265" y="435" font-family="system-ui" font-size="10" fill="white" font-weight="600">Approve</text>
+  <rect x="326" y="420" width="80" height="22" rx="4" fill="#f59e0b"/>
+  <text x="339" y="435" font-family="system-ui" font-size="10" fill="white" font-weight="600">Customize</text>
+  <rect x="414" y="420" width="50" height="22" rx="4" fill="#1e2a3a" stroke="#1e2a3a"/>
+  <text x="427" y="435" font-family="system-ui" font-size="10" fill="#64748b" font-weight="600">Skip</text>
+
+  <!-- Critical Findings preview -->
+  <rect x="196" y="460" width="736" height="108" rx="8" fill="#111827" stroke="#1e2a3a" stroke-width="1"/>
+  <text x="212" y="482" font-family="monospace" font-size="10" fill="#e2e8f0" font-weight="700">CRITICAL FINDINGS</text>
+  <!-- Finding rows -->
+  <rect x="204" y="492" width="720" height="22" rx="3" fill="#0d1321"/>
+  <rect x="208" y="495" width="52" height="14" rx="2" fill="rgba(239,68,68,0.15)"/>
+  <text x="214" y="505" font-family="monospace" font-size="8" fill="#ef4444" font-weight="600">▲ CRIT</text>
+  <text x="270" y="506" font-family="monospace" font-size="9" fill="#e2e8f0">admin@target.com — 12 leaked creds (3 plaintext)</text>
+  <text x="830" y="506" font-family="monospace" font-size="8" fill="#a855f7">T1078</text>
+
+  <rect x="204" y="518" width="720" height="22" rx="3" fill="#0d1321"/>
+  <rect x="208" y="521" width="52" height="14" rx="2" fill="rgba(239,68,68,0.15)"/>
+  <text x="214" y="531" font-family="monospace" font-size="8" fill="#ef4444" font-weight="600">▲ CRIT</text>
+  <text x="270" y="532" font-family="monospace" font-size="9" fill="#e2e8f0">/.env — Environment file with DB credentials exposed</text>
+  <text x="830" y="532" font-family="monospace" font-size="8" fill="#a855f7">T1078</text>
+
+  <rect x="204" y="544" width="720" height="22" rx="3" fill="#0d1321"/>
+  <rect x="208" y="547" width="52" height="14" rx="2" fill="rgba(239,68,68,0.15)"/>
+  <text x="214" y="557" font-family="monospace" font-size="8" fill="#ef4444" font-weight="600">▲ CRIT</text>
+  <text x="270" y="558" font-family="monospace" font-size="9" fill="#e2e8f0">CVE-2024-3400 — PAN-OS Command Injection</text>
+  <text x="830" y="558" font-family="monospace" font-size="8" fill="#a855f7">T1190</text>
+</svg>

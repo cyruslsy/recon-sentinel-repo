@@ -12,9 +12,10 @@
   <img src="https://img.shields.io/badge/typescript-5.0+-blue?logo=typescript&logoColor=white" />
   <img src="https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white" />
   <img src="https://img.shields.io/badge/license-proprietary-red" />
-  <img src="https://img.shields.io/badge/tests-78-green" />
+  <img src="https://img.shields.io/badge/tests-91-green" />
   <img src="https://img.shields.io/badge/agents-13-orange" />
   <img src="https://img.shields.io/badge/MITRE_ATT&CK-15_techniques-purple" />
+  <img src="https://img.shields.io/badge/review_rounds-8_passed-brightgreen" />
 </p>
 
 ---
@@ -32,6 +33,22 @@ Recon Sentinel is an intelligent reconnaissance platform for penetration testers
 - **Real-time notifications** — Slack/Discord/Telegram/webhook alerts on critical findings as they're discovered
 - **Multi-tenant authorization** — org → project → target → scan isolation with RBAC
 - **Resume from checkpoint** — crashed or paused scans resume from the exact phase they stopped at
+
+---
+
+## UI Preview
+
+<p align="center">
+  <img src="docs/assets/screenshot-dashboard.svg" alt="Dashboard — Real-time scan monitoring with agent status, critical findings, and approval gates" width="900" />
+</p>
+
+<p align="center"><em>Dashboard — Live scan monitoring with agent status, approval gates, and critical findings</em></p>
+
+<p align="center">
+  <img src="docs/assets/screenshot-health-feed.svg" alt="Health Feed — Self-correction timeline showing agents detecting and fixing anomalies in real-time" width="900" />
+</p>
+
+<p align="center"><em>Health Feed — Self-correction timeline: agents detect anomalies, auto-fix, and escalate when needed</em></p>
 
 ---
 
@@ -259,7 +276,7 @@ pip install -r requirements.txt
 cd ..
 python -m pytest tests/ -v
 
-# 78 tests across 11 suites:
+# 91 tests across 12 suites:
 #   test_auth.py           — register, login, JWT, protected routes
 #   test_scan_lifecycle.py — org → project → target → scan launch
 #   test_scope.py          — scope CRUD, auth enforcement
@@ -343,19 +360,20 @@ recon-sentinel-repo/
 
 | Metric | Value |
 |--------|-------|
-| Total code lines | 14,289 |
-| Python lines | 11,400+ |
-| TypeScript lines | 2,500+ |
-| Files | 128 |
-| API endpoints | 88+ REST + 2 WebSocket |
+| Total code lines | 15,820+ |
+| Python lines | 12,400+ |
+| TypeScript lines | 2,800+ |
+| Files | 168 |
+| API endpoints | 91 REST + 2 WebSocket |
 | Database tables | 29 |
 | Frontend views | 12 |
 | Scanning agents | 13 |
 | MITRE ATT&CK techniques | 15 |
 | Self-correction patterns | 5 |
 | Notification channels | 5 (Slack, Discord, Telegram, webhook, email) |
-| Tests | 78 |
-| Code reviews | 11 rounds, 52 issues fixed |
+| Authorization helpers | 13 (covering 91/91 endpoints) |
+| Tests | 91 |
+| Adversarial review rounds | 8 (80+ issues fixed) |
 
 ---
 
