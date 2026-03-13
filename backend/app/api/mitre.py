@@ -1,4 +1,10 @@
-"""MITRE ATT&CK Routes — Technique reference and scan heatmap"""
+"""MITRE ATT&CK Routes — Technique reference and scan heatmap
+
+Authorization note: list_techniques and get_technique are intentionally accessible
+to all authenticated users without project/scan authorization. MITRE ATT&CK data
+is public reference material (https://attack.mitre.org/) and is not tenant-specific.
+The heatmap endpoint requires authorize_scan since it contains scan-specific data.
+"""
 
 from uuid import UUID
 

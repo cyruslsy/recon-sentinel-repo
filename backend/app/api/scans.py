@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.tz import utc_now
 from app.core.auth import get_current_user
-from app.core.authorization import authorize_scan
+from app.core.authorization import authorize_scan, authorize_target
 from app.models.models import User, Scan, ApprovalGate, Target
 from app.models.enums import ScanStatus, ApprovalDecision
 from app.schemas.schemas import (
@@ -35,8 +35,18 @@ async def list_scans(
 ):
     """List scans visible to the current user."""
     q = select(Scan).order_by(Scan.created_at.desc()).limit(limit).offset(offset)
-    # Filter to scans the user owns or has project membership for
-    q = q.where(Scan.created_by == user.id)
+    if user.role and user.role.value == "admin":
+        pass  # Admin sees all scans
+    else:
+        # Scans the user created OR scans on targets in projects the user is a member of
+        from app.models.models import ProjectMember
+        accessible_via_project = (
+            select(Scan.id)
+            .join(Target, Scan.target_id == Target.id)
+            .join(ProjectMember, ProjectMember.project_id == Target.project_id)
+            .where(ProjectMember.user_id == user.id)
+        )
+        q = q.where((Scan.created_by == user.id) | (Scan.id.in_(accessible_via_project)))
     if target_id:
         q = q.where(Scan.target_id == target_id)
     if status:
@@ -50,10 +60,8 @@ async def list_scans(
 @router.post("/", response_model=ScanResponse, status_code=201)
 async def launch_scan(data: ScanCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Launch a new scan. The orchestrator begins the passive phase immediately."""
-    # Get target to resolve project_id
-    target = await db.get(Target, data.target_id)
-    if not target:
-        raise HTTPException(status_code=404, detail="Target not found")
+    # Verify user has access to this target's project
+    target = await authorize_target(data.target_id, user, db)
 
     scan = Scan(
         **data.model_dump(),

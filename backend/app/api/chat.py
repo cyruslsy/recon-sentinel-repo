@@ -118,6 +118,10 @@ async def send_message(session_id: UUID, data: ChatMessageCreate, user: User = D
     slash_cmd = content.split(" ", 1)[0] if content.startswith("/") else None
 
     # Build scan context if session is linked to a scan
+    # NOTE: These reads use bare db.get after authorize_chat_session (user owns the session).
+    # The session's scan_id could reference a scan the user lost access to (e.g., removed from
+    # project after session creation). This is accepted because: (1) data only flows into the
+    # LLM prompt, not the API response, and (2) the session was created when access was valid.
     session = await db.get(ChatSession, session_id)
     scan_context = ""
     if session and session.scan_id:

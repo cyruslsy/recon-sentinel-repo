@@ -99,8 +99,10 @@ async def verify_api_key(key_id: UUID, user: User = Depends(get_current_user), d
     headers = {}
     params = {}
     if service == "shodan":
-        # Shodan requires key as query param (no header auth support)
-        # Using params dict keeps key out of the URL string for safer logging
+        # NOTE: Shodan API requires key as query parameter — no header-based auth available.
+        # Using params= dict keeps the key out of the URL string literal in source code,
+        # but the key will still appear in httpx debug logs, proxy logs, and Shodan server logs.
+        # This is a Shodan API limitation, not a Recon Sentinel issue.
         params["key"] = decrypted
     elif service == "virustotal":
         headers["x-apikey"] = decrypted
