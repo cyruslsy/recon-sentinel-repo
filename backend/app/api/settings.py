@@ -86,7 +86,7 @@ async def verify_api_key(key_id: UUID, user: User = Depends(get_current_user), d
 
     # Service-specific health checks
     health_endpoints = {
-        "shodan": ("https://api.shodan.io/api-info?key={key}", "query_credits"),
+        "shodan": ("https://api.shodan.io/api-info", "query_credits"),
         "virustotal": ("https://www.virustotal.com/api/v3/users/me", None),
         "hibp": ("https://haveibeenpwned.com/api/v3/subscription/status", None),
     }
@@ -95,18 +95,21 @@ async def verify_api_key(key_id: UUID, user: User = Depends(get_current_user), d
     if service not in health_endpoints:
         return {"status": "unknown", "service": key.service_name, "detail": "No health check available for this service"}
 
-    url_template, check_field = health_endpoints[service]
-    url = url_template.replace("{key}", decrypted)
+    url, check_field = health_endpoints[service]
     headers = {}
-    if service == "virustotal":
+    params = {}
+    if service == "shodan":
+        # Shodan requires key as query param (no header auth support)
+        # Using params dict keeps key out of the URL string for safer logging
+        params["key"] = decrypted
+    elif service == "virustotal":
         headers["x-apikey"] = decrypted
-        url = health_endpoints[service][0]
     elif service == "hibp":
         headers["hibp-api-key"] = decrypted
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url, headers=headers)
+            resp = await client.get(url, headers=headers, params=params)
             if resp.status_code == 200:
                 return {"status": "valid", "service": key.service_name}
             else:
@@ -203,6 +206,8 @@ async def delete_engine(engine_id: UUID, user: User = Depends(get_current_user),
 async def llm_usage_summary(scan_id: UUID | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Get LLM usage and cost summary."""
     from sqlalchemy import func
+    from app.core.authorization import authorize_scan
+    from app.models.models import Scan, Target, ProjectMember
     
     q = select(
         LlmUsageLog.model_name,
@@ -214,7 +219,17 @@ async def llm_usage_summary(scan_id: UUID | None = None, user: User = Depends(ge
     ).group_by(LlmUsageLog.model_name, LlmUsageLog.task_type)
     
     if scan_id:
+        await authorize_scan(scan_id, user, db)
         q = q.where(LlmUsageLog.scan_id == scan_id)
+    elif not (user.role and user.role.value == "admin"):
+        # Scope to scans the user has access to
+        accessible_scans = (
+            select(Scan.id)
+            .join(Target, Scan.target_id == Target.id)
+            .join(ProjectMember, ProjectMember.project_id == Target.project_id)
+            .where(ProjectMember.user_id == user.id)
+        )
+        q = q.where(LlmUsageLog.scan_id.in_(accessible_scans))
     
     result = await db.execute(q)
     return [

@@ -127,7 +127,7 @@ export default function HealthFeedPage() {
             {filtered.map((event, i) => {
               const meta = EVENT_ICONS[event.event_type] || EVENT_ICONS.info;
               const isExpanded = expandedId === event.id;
-              const isConnected = i > 0 && events[i - 1]?.agent_run_id === event.agent_run_id;
+              const isConnected = i > 0 && filtered[i - 1]?.agent_run_id === event.agent_run_id;
 
               return (
                 <div key={event.id} className={`relative pl-14 pb-4 ${isConnected ? "pt-0" : "pt-2"}`}>

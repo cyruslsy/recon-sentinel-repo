@@ -153,10 +153,18 @@ export default function HistoryPage() {
                 <div
                   className="text-sm prose prose-invert prose-sm max-w-none [&>p]:mb-1"
                   dangerouslySetInnerHTML={{
-                    __html: diff.ai_diff_summary
-                      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-                      .replace(/\n- /g, "<br/>• ")
-                      .replace(/\n/g, "<br/>"),
+                    __html: (() => {
+                      // Sanitize: strip ALL HTML tags first, then apply safe markdown transforms
+                      const sanitized = diff.ai_diff_summary
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;")
+                        .replace(/"/g, "&quot;");
+                      return sanitized
+                        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                        .replace(/\n- /g, "<br/>• ")
+                        .replace(/\n/g, "<br/>");
+                    })(),
                   }}
                 />
               </div>

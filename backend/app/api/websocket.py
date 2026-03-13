@@ -177,7 +177,10 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
                     await websocket.close(code=4001, reason="Token revoked")
                     return
             except Exception:
-                pass  # If Redis is down, allow through (fail-open for chat)
+                # Fail-closed: if Redis is down, reject the connection
+                # A revoked token could slip through otherwise
+                await websocket.close(code=4011, reason="Token validation unavailable — please retry")
+                return
         # Verify user exists and is active
         from app.core.database import AsyncSessionLocal
         from app.models.models import User

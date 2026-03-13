@@ -70,10 +70,12 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <h3 className="text-sm font-medium truncate">{agent.agent_name}</h3>
-          {/* MITRE tag */}
-          <span className="text-[9px] font-mono px-1.5 py-0.5 bg-sentinel-purple/10 text-sentinel-purple rounded">
-            {agent.mitre_tags?.[0] ?? "ATT&CK"}
-          </span>
+          {/* MITRE tag — only shown if agent has tags */}
+          {agent.mitre_tags?.length > 0 && (
+            <span className="text-[9px] font-mono px-1.5 py-0.5 bg-sentinel-purple/10 text-sentinel-purple rounded">
+              {agent.mitre_tags[0]}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span className={`text-xs font-medium ${statusColor}`}>{statusIcon}{status}</span>

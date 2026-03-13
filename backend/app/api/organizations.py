@@ -21,7 +21,20 @@ router = APIRouter()
 
 @router.get("/", response_model=list[OrganizationResponse])
 async def list_organizations(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Organization).order_by(Organization.created_at.desc()))
+    if user.role and user.role.value == "admin":
+        q = select(Organization).order_by(Organization.created_at.desc())
+    else:
+        from app.models.models import Project, ProjectMember
+        # Orgs where user is a member of any project, or user created the org
+        member_orgs = (
+            select(Project.org_id)
+            .join(ProjectMember, ProjectMember.project_id == Project.id)
+            .where(ProjectMember.user_id == user.id)
+        )
+        q = select(Organization).where(
+            (Organization.id.in_(member_orgs)) | (Organization.created_by == user.id)
+        ).order_by(Organization.created_at.desc())
+    result = await db.execute(q)
     return result.scalars().all()
 
 

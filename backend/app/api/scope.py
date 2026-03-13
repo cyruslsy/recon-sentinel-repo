@@ -69,6 +69,7 @@ async def delete_scope_item(item_id: UUID, user: User = Depends(get_current_user
 @router.post("/{project_id}/check", response_model=ScopeCheckResponse)
 async def check_scope(project_id: UUID, data: ScopeCheckRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Check if a target value is in scope. Uses the is_in_scope() database function."""
+    await authorize_project(project_id, user, db)
     result = await db.execute(
         text("SELECT is_in_scope(:project_id, :target)"),
         {"project_id": str(project_id), "target": data.target_value}
@@ -80,7 +81,8 @@ async def check_scope(project_id: UUID, data: ScopeCheckRequest, user: User = De
 @router.get("/{project_id}/violations", response_model=list[ScopeViolationResponse])
 async def list_violations(project_id: UUID, scan_id: UUID | None = None, limit: int = 50, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """List scope violations (blocked requests) for audit trail."""
-    q = select(ScopeViolation).order_by(ScopeViolation.blocked_at.desc()).limit(limit)
+    await authorize_project(project_id, user, db)
+    q = select(ScopeViolation).where(ScopeViolation.project_id == project_id).order_by(ScopeViolation.blocked_at.desc()).limit(limit)
     if scan_id:
         q = q.where(ScopeViolation.scan_id == scan_id)
     result = await db.execute(q)

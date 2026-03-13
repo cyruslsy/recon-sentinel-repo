@@ -75,16 +75,6 @@ export default function Sidebar() {
     return () => clearInterval(interval);
   }, []);
 
-  // Listen for WebSocket events to update badges
-  useEffect(() => {
-    function handleBadge(e: CustomEvent) {
-      const { key, value } = e.detail;
-      setBadges(prev => ({ ...prev, [key]: value }));
-    }
-    window.addEventListener("sentinel:badge" as any, handleBadge);
-    return () => window.removeEventListener("sentinel:badge" as any, handleBadge);
-  }, []);
-
   return (
     <aside className="w-56 h-screen fixed left-0 top-0 bg-sentinel-surface border-r border-sentinel-border flex flex-col">
       {/* Logo */}

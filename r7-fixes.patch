@@ -1,0 +1,298 @@
+diff --git a/backend/app/api/organizations.py b/backend/app/api/organizations.py
+index 6bd8dc4..55efd6e 100644
+--- a/backend/app/api/organizations.py
++++ b/backend/app/api/organizations.py
+@@ -21,7 +21,20 @@ router = APIRouter()
+ 
+ @router.get("/", response_model=list[OrganizationResponse])
+ async def list_organizations(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+-    result = await db.execute(select(Organization).order_by(Organization.created_at.desc()))
++    if user.role and user.role.value == "admin":
++        q = select(Organization).order_by(Organization.created_at.desc())
++    else:
++        from app.models.models import Project, ProjectMember
++        # Orgs where user is a member of any project, or user created the org
++        member_orgs = (
++            select(Project.org_id)
++            .join(ProjectMember, ProjectMember.project_id == Project.id)
++            .where(ProjectMember.user_id == user.id)
++        )
++        q = select(Organization).where(
++            (Organization.id.in_(member_orgs)) | (Organization.created_by == user.id)
++        ).order_by(Organization.created_at.desc())
++    result = await db.execute(q)
+     return result.scalars().all()
+ 
+ 
+diff --git a/backend/app/api/projects.py b/backend/app/api/projects.py
+index 8f5f1a3..2e16794 100644
+--- a/backend/app/api/projects.py
++++ b/backend/app/api/projects.py
+@@ -20,9 +20,20 @@ router = APIRouter()
+ 
+ @router.get("/", response_model=list[ProjectResponse])
+ async def list_projects(org_id: UUID | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+-    q = select(Project).order_by(Project.created_at.desc())
+-    if org_id:
+-        q = q.where(Project.org_id == org_id)
++    if user.role and user.role.value == "admin":
++        q = select(Project).order_by(Project.created_at.desc())
++        if org_id:
++            q = q.where(Project.org_id == org_id)
++    else:
++        # Scope to projects the user is a member of or created
++        accessible = (
++            select(ProjectMember.project_id).where(ProjectMember.user_id == user.id)
++        )
++        q = select(Project).where(
++            (Project.id.in_(accessible)) | (Project.created_by == user.id)
++        ).order_by(Project.created_at.desc())
++        if org_id:
++            q = q.where(Project.org_id == org_id)
+     result = await db.execute(q)
+     return result.scalars().all()
+ 
+@@ -50,6 +61,10 @@ async def delete_project(project_id: UUID, user: User = Depends(get_current_user
+ 
+ @router.post("/{project_id}/members", status_code=201)
+ async def add_member(project_id: UUID, user_id: UUID, role: str = "tester", user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
++    # Only project owner/admin or org admin can add members
++    project = await authorize_project(project_id, user, db)
++    if project.created_by != user.id and not (user.role and user.role.value == "admin"):
++        raise HTTPException(status_code=403, detail="Only project owner or admin can add members")
+     member = ProjectMember(project_id=project_id, user_id=user_id, role=role)
+     db.add(member)
+     await db.commit()
+@@ -58,6 +73,10 @@ async def add_member(project_id: UUID, user_id: UUID, role: str = "tester", user
+ 
+ @router.delete("/{project_id}/members/{user_id}", status_code=204)
+ async def remove_member(project_id: UUID, user_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
++    # Only project owner/admin can remove members
++    project = await authorize_project(project_id, user, db)
++    if project.created_by != user.id and not (user.role and user.role.value == "admin"):
++        raise HTTPException(status_code=403, detail="Only project owner or admin can remove members")
+     result = await db.execute(
+         select(ProjectMember).where(ProjectMember.project_id == project_id, ProjectMember.user_id == user_id)
+     )
+diff --git a/backend/app/api/scope.py b/backend/app/api/scope.py
+index f82fc5f..16488e1 100644
+--- a/backend/app/api/scope.py
++++ b/backend/app/api/scope.py
+@@ -69,6 +69,7 @@ async def delete_scope_item(item_id: UUID, user: User = Depends(get_current_user
+ @router.post("/{project_id}/check", response_model=ScopeCheckResponse)
+ async def check_scope(project_id: UUID, data: ScopeCheckRequest, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+     """Check if a target value is in scope. Uses the is_in_scope() database function."""
++    await authorize_project(project_id, user, db)
+     result = await db.execute(
+         text("SELECT is_in_scope(:project_id, :target)"),
+         {"project_id": str(project_id), "target": data.target_value}
+@@ -80,7 +81,8 @@ async def check_scope(project_id: UUID, data: ScopeCheckRequest, user: User = De
+ @router.get("/{project_id}/violations", response_model=list[ScopeViolationResponse])
+ async def list_violations(project_id: UUID, scan_id: UUID | None = None, limit: int = 50, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+     """List scope violations (blocked requests) for audit trail."""
+-    q = select(ScopeViolation).order_by(ScopeViolation.blocked_at.desc()).limit(limit)
++    await authorize_project(project_id, user, db)
++    q = select(ScopeViolation).where(ScopeViolation.project_id == project_id).order_by(ScopeViolation.blocked_at.desc()).limit(limit)
+     if scan_id:
+         q = q.where(ScopeViolation.scan_id == scan_id)
+     result = await db.execute(q)
+diff --git a/backend/app/api/settings.py b/backend/app/api/settings.py
+index 929340b..ab10310 100644
+--- a/backend/app/api/settings.py
++++ b/backend/app/api/settings.py
+@@ -86,7 +86,7 @@ async def verify_api_key(key_id: UUID, user: User = Depends(get_current_user), d
+ 
+     # Service-specific health checks
+     health_endpoints = {
+-        "shodan": ("https://api.shodan.io/api-info?key={key}", "query_credits"),
++        "shodan": ("https://api.shodan.io/api-info", "query_credits"),
+         "virustotal": ("https://www.virustotal.com/api/v3/users/me", None),
+         "hibp": ("https://haveibeenpwned.com/api/v3/subscription/status", None),
+     }
+@@ -95,18 +95,21 @@ async def verify_api_key(key_id: UUID, user: User = Depends(get_current_user), d
+     if service not in health_endpoints:
+         return {"status": "unknown", "service": key.service_name, "detail": "No health check available for this service"}
+ 
+-    url_template, check_field = health_endpoints[service]
+-    url = url_template.replace("{key}", decrypted)
++    url, check_field = health_endpoints[service]
+     headers = {}
+-    if service == "virustotal":
++    params = {}
++    if service == "shodan":
++        # Shodan requires key as query param (no header auth support)
++        # Using params dict keeps key out of the URL string for safer logging
++        params["key"] = decrypted
++    elif service == "virustotal":
+         headers["x-apikey"] = decrypted
+-        url = health_endpoints[service][0]
+     elif service == "hibp":
+         headers["hibp-api-key"] = decrypted
+ 
+     try:
+         async with httpx.AsyncClient(timeout=10) as client:
+-            resp = await client.get(url, headers=headers)
++            resp = await client.get(url, headers=headers, params=params)
+             if resp.status_code == 200:
+                 return {"status": "valid", "service": key.service_name}
+             else:
+@@ -203,6 +206,8 @@ async def delete_engine(engine_id: UUID, user: User = Depends(get_current_user),
+ async def llm_usage_summary(scan_id: UUID | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+     """Get LLM usage and cost summary."""
+     from sqlalchemy import func
++    from app.core.authorization import authorize_scan
++    from app.models.models import Scan, Target, ProjectMember
+     
+     q = select(
+         LlmUsageLog.model_name,
+@@ -214,7 +219,17 @@ async def llm_usage_summary(scan_id: UUID | None = None, user: User = Depends(ge
+     ).group_by(LlmUsageLog.model_name, LlmUsageLog.task_type)
+     
+     if scan_id:
++        await authorize_scan(scan_id, user, db)
+         q = q.where(LlmUsageLog.scan_id == scan_id)
++    elif not (user.role and user.role.value == "admin"):
++        # Scope to scans the user has access to
++        accessible_scans = (
++            select(Scan.id)
++            .join(Target, Scan.target_id == Target.id)
++            .join(ProjectMember, ProjectMember.project_id == Target.project_id)
++            .where(ProjectMember.user_id == user.id)
++        )
++        q = q.where(LlmUsageLog.scan_id.in_(accessible_scans))
+     
+     result = await db.execute(q)
+     return [
+diff --git a/backend/app/api/websocket.py b/backend/app/api/websocket.py
+index 9631e9b..3d5c029 100644
+--- a/backend/app/api/websocket.py
++++ b/backend/app/api/websocket.py
+@@ -177,7 +177,10 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
+                     await websocket.close(code=4001, reason="Token revoked")
+                     return
+             except Exception:
+-                pass  # If Redis is down, allow through (fail-open for chat)
++                # Fail-closed: if Redis is down, reject the connection
++                # A revoked token could slip through otherwise
++                await websocket.close(code=4011, reason="Token validation unavailable — please retry")
++                return
+         # Verify user exists and is active
+         from app.core.database import AsyncSessionLocal
+         from app.models.models import User
+diff --git a/docker-compose.prod.yml b/docker-compose.prod.yml
+index 7d91440..237b3c8 100644
+--- a/docker-compose.prod.yml
++++ b/docker-compose.prod.yml
+@@ -87,7 +87,7 @@ services:
+     # NO --reload, NO bind mount
+     environment:
+       DATABASE_URL: postgresql+asyncpg://sentinel:@postgres:5432/recon_sentinel
+-      REDIS_URL: redis://:sentinel-redis-secret@redis:6379/0
++      REDIS_URL: redis://:${REDIS_PASSWORD:-sentinel-redis-secret}@redis:6379/0
+       DB_PASSWORD_FILE: /run/secrets/db_password
+       JWT_SECRET_FILE: /run/secrets/jwt_secret
+       ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+@@ -132,9 +132,9 @@ services:
+       --hostname=worker-tools@%h
+     environment:
+       DATABASE_URL: postgresql+asyncpg://sentinel:@postgres:5432/recon_sentinel
+-      REDIS_URL: redis://:sentinel-redis-secret@redis:6379/0
+-      CELERY_BROKER_URL: redis://:sentinel-redis-secret@redis:6379/1
+-      CELERY_RESULT_BACKEND: redis://:sentinel-redis-secret@redis:6379/2
++      REDIS_URL: redis://:${REDIS_PASSWORD:-sentinel-redis-secret}@redis:6379/0
++      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-sentinel-redis-secret}@redis:6379/1
++      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-sentinel-redis-secret}@redis:6379/2
+       DB_PASSWORD_FILE: /run/secrets/db_password
+       ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
+     secrets:
+@@ -179,7 +179,7 @@ services:
+       --loglevel=warning
+       --schedule=/tmp/celerybeat-schedule
+     environment:
+-      CELERY_BROKER_URL: redis://:sentinel-redis-secret@redis:6379/1
++      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-sentinel-redis-secret}@redis:6379/1
+     depends_on:
+       redis:
+         condition: service_healthy
+diff --git a/frontend/src/app/agents/page.tsx b/frontend/src/app/agents/page.tsx
+index c6f735d..0674946 100644
+--- a/frontend/src/app/agents/page.tsx
++++ b/frontend/src/app/agents/page.tsx
+@@ -70,10 +70,12 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
+       <div className="flex items-center justify-between mb-2">
+         <div className="flex items-center gap-2 min-w-0">
+           <h3 className="text-sm font-medium truncate">{agent.agent_name}</h3>
+-          {/* MITRE tag */}
+-          <span className="text-[9px] font-mono px-1.5 py-0.5 bg-sentinel-purple/10 text-sentinel-purple rounded">
+-            {agent.mitre_tags?.[0] ?? "ATT&CK"}
+-          </span>
++          {/* MITRE tag — only shown if agent has tags */}
++          {agent.mitre_tags?.length > 0 && (
++            <span className="text-[9px] font-mono px-1.5 py-0.5 bg-sentinel-purple/10 text-sentinel-purple rounded">
++              {agent.mitre_tags[0]}
++            </span>
++          )}
+         </div>
+         <div className="flex items-center gap-2">
+           <span className={`text-xs font-medium ${statusColor}`}>{statusIcon}{status}</span>
+diff --git a/frontend/src/app/health/page.tsx b/frontend/src/app/health/page.tsx
+index 650528b..676f11e 100644
+--- a/frontend/src/app/health/page.tsx
++++ b/frontend/src/app/health/page.tsx
+@@ -127,7 +127,7 @@ export default function HealthFeedPage() {
+             {filtered.map((event, i) => {
+               const meta = EVENT_ICONS[event.event_type] || EVENT_ICONS.info;
+               const isExpanded = expandedId === event.id;
+-              const isConnected = i > 0 && events[i - 1]?.agent_run_id === event.agent_run_id;
++              const isConnected = i > 0 && filtered[i - 1]?.agent_run_id === event.agent_run_id;
+ 
+               return (
+                 <div key={event.id} className={`relative pl-14 pb-4 ${isConnected ? "pt-0" : "pt-2"}`}>
+diff --git a/frontend/src/app/history/page.tsx b/frontend/src/app/history/page.tsx
+index 9a323e7..1610a7c 100644
+--- a/frontend/src/app/history/page.tsx
++++ b/frontend/src/app/history/page.tsx
+@@ -153,10 +153,18 @@ export default function HistoryPage() {
+                 <div
+                   className="text-sm prose prose-invert prose-sm max-w-none [&>p]:mb-1"
+                   dangerouslySetInnerHTML={{
+-                    __html: diff.ai_diff_summary
+-                      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+-                      .replace(/\n- /g, "<br/>• ")
+-                      .replace(/\n/g, "<br/>"),
++                    __html: (() => {
++                      // Sanitize: strip ALL HTML tags first, then apply safe markdown transforms
++                      const sanitized = diff.ai_diff_summary
++                        .replace(/&/g, "&amp;")
++                        .replace(/</g, "&lt;")
++                        .replace(/>/g, "&gt;")
++                        .replace(/"/g, "&quot;");
++                      return sanitized
++                        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
++                        .replace(/\n- /g, "<br/>• ")
++                        .replace(/\n/g, "<br/>");
++                    })(),
+                   }}
+                 />
+               </div>
+diff --git a/frontend/src/components/Sidebar.tsx b/frontend/src/components/Sidebar.tsx
+index 07a7575..7d9c410 100644
+--- a/frontend/src/components/Sidebar.tsx
++++ b/frontend/src/components/Sidebar.tsx
+@@ -75,16 +75,6 @@ export default function Sidebar() {
+     return () => clearInterval(interval);
+   }, []);
+ 
+-  // Listen for WebSocket events to update badges
+-  useEffect(() => {
+-    function handleBadge(e: CustomEvent) {
+-      const { key, value } = e.detail;
+-      setBadges(prev => ({ ...prev, [key]: value }));
+-    }
+-    window.addEventListener("sentinel:badge" as any, handleBadge);
+-    return () => window.removeEventListener("sentinel:badge" as any, handleBadge);
+-  }, []);
+-
+   return (
+     <aside className="w-56 h-screen fixed left-0 top-0 bg-sentinel-surface border-r border-sentinel-border flex flex-col">
+       {/* Logo */}
