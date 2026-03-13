@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
-from app.core.authorization import authorize_scan
+from app.core.authorization import authorize_scan, authorize_report
 from app.models.models import User, Report
 from app.schemas.schemas import ReportCreate, ReportResponse
 
@@ -50,17 +50,13 @@ async def generate_report(data: ReportCreate, user: User = Depends(get_current_u
 
 @router.get("/{report_id}", response_model=ReportResponse)
 async def get_report(report_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    report = await db.get(Report, report_id)
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    return report
+    return await authorize_report(report_id, user, db)
 
 
 @router.get("/{report_id}/download")
 async def download_report(report_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Download the generated report file."""
-    report = await db.get(Report, report_id)
-    if not report:
+    report = await authorize_report(report_id, user, db)
         raise HTTPException(status_code=404, detail="Report not found")
     if report.file_path == "pending":
         raise HTTPException(status_code=202, detail="Report is still generating")
@@ -69,8 +65,6 @@ async def download_report(report_id: UUID, user: User = Depends(get_current_user
 
 @router.delete("/{report_id}", status_code=204)
 async def delete_report(report_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    report = await db.get(Report, report_id)
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
+    report = await authorize_report(report_id, user, db)
     await db.delete(report)
     await db.commit()

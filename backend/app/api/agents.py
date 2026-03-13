@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.tz import utc_now
 from app.core.auth import get_current_user
-from app.core.authorization import authorize_scan
+from app.core.authorization import authorize_scan, authorize_agent_run, authorize_health_event
 from app.core.celery_app import celery_app
 from app.models.models import User, AgentRun, HealthEvent
 from app.schemas.schemas import AgentRunResponse, AgentRunBrief, HealthEventResponse, HealthEventDecision
@@ -33,18 +33,13 @@ async def list_agent_runs(scan_id: UUID, user: User = Depends(get_current_user),
 
 @router.get("/{agent_run_id}", response_model=AgentRunResponse)
 async def get_agent_run(agent_run_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    agent = await db.get(AgentRun, agent_run_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent run not found")
-    return agent
+    return await authorize_agent_run(agent_run_id, user, db)
 
 
 @router.post("/{agent_run_id}/pause")
 async def pause_agent(agent_run_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Pause a running agent. Sends SIGUSR1 to the Celery task."""
-    agent = await db.get(AgentRun, agent_run_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent run not found")
+    agent = await authorize_agent_run(agent_run_id, user, db)
     agent.status = "paused"
     await db.commit()
     return {"status": "agent_paused"}
@@ -53,9 +48,7 @@ async def pause_agent(agent_run_id: UUID, user: User = Depends(get_current_user)
 @router.post("/{agent_run_id}/resume")
 async def resume_agent(agent_run_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Resume a paused agent by re-dispatching its Celery task."""
-    agent = await db.get(AgentRun, agent_run_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent run not found")
+    agent = await authorize_agent_run(agent_run_id, user, db)
     if agent.status != "paused":
         raise HTTPException(status_code=400, detail="Agent is not paused")
 
@@ -74,9 +67,7 @@ async def resume_agent(agent_run_id: UUID, user: User = Depends(get_current_user
 @router.post("/{agent_run_id}/rerun")
 async def rerun_agent(agent_run_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Re-run a completed/failed agent from scratch. Creates new AgentRun."""
-    original = await db.get(AgentRun, agent_run_id)
-    if not original:
-        raise HTTPException(status_code=404, detail="Agent run not found")
+    original = await authorize_agent_run(agent_run_id, user, db)
     if original.status not in ("completed", "error", "cancelled"):
         raise HTTPException(status_code=400, detail="Can only rerun completed/failed/cancelled agents")
 
@@ -123,18 +114,13 @@ async def list_health_events(
 
 @router.get("/health/{event_id}", response_model=HealthEventResponse)
 async def get_health_event(event_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    event = await db.get(HealthEvent, event_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Health event not found")
-    return event
+    return await authorize_health_event(event_id, user, db)
 
 
 @router.post("/health/{event_id}/decide", response_model=HealthEventResponse)
 async def decide_health_escalation(event_id: UUID, data: HealthEventDecision, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Respond to an escalate_user health event with a decision."""
-    event = await db.get(HealthEvent, event_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Health event not found")
+    event = await authorize_health_event(event_id, user, db)
     if event.event_type != "escalate_user":
         raise HTTPException(status_code=400, detail="Only escalate_user events can be decided")
     if event.user_decision:

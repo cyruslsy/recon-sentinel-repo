@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
-from app.core.authorization import authorize_project
+from app.core.authorization import authorize_project, authorize_target
 from app.models.models import User, Target, Scan
 from app.schemas.schemas import TargetCreate, TargetResponse, TargetContextResponse
 
@@ -39,17 +39,13 @@ async def create_target(project_id: UUID, data: TargetCreate, user: User = Depen
 
 @router.get("/{target_id}", response_model=TargetResponse)
 async def get_target(target_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    target = await db.get(Target, target_id)
-    if not target:
-        raise HTTPException(status_code=404, detail="Target not found")
-    return target
+    return await authorize_target(target_id, user, db)
 
 
 @router.get("/{target_id}/context", response_model=TargetContextResponse)
 async def get_target_context(target_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """P1: Target Context Panel — WHOIS, ASN, CDN, tech stack, previous scans."""
-    target = await db.get(Target, target_id)
-    if not target:
+    target = await authorize_target(target_id, user, db)
         raise HTTPException(status_code=404, detail="Target not found")
     
     scan_count = await db.execute(
@@ -72,8 +68,7 @@ async def get_target_context(target_id: UUID, user: User = Depends(get_current_u
 @router.post("/{target_id}/refresh-context")
 async def refresh_target_context(target_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Trigger WHOIS/DNS/tech detection refresh for target context panel."""
-    target = await db.get(Target, target_id)
-    if not target:
+    target = await authorize_target(target_id, user, db)
         raise HTTPException(status_code=404, detail="Target not found")
 
     # Dispatch async context enrichment
@@ -85,8 +80,6 @@ async def refresh_target_context(target_id: UUID, user: User = Depends(get_curre
 
 @router.delete("/{target_id}", status_code=204)
 async def delete_target(target_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    target = await db.get(Target, target_id)
-    if not target:
-        raise HTTPException(status_code=404, detail="Target not found")
+    target = await authorize_target(target_id, user, db)
     await db.delete(target)
     await db.commit()

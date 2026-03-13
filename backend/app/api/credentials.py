@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
-from app.core.authorization import authorize_scan
+from app.core.authorization import authorize_scan, authorize_credential
 from app.models.models import User, CredentialLeak
 from app.schemas.schemas import CredentialLeakResponse, CredentialLeakSummary
 
@@ -51,9 +51,7 @@ async def credential_summary(scan_id: UUID, user: User = Depends(get_current_use
 
 @router.get("/{cred_id}", response_model=CredentialLeakResponse)
 async def get_credential(cred_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    cred = await db.get(CredentialLeak, cred_id)
-    if not cred:
-        raise HTTPException(status_code=404, detail="Credential not found")
+    cred = await authorize_credential(cred_id, user, db)
     # Log sensitive data access to audit trail
     from app.models.models import AuditLog
     audit = AuditLog(

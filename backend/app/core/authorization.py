@@ -17,7 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.models import (
     User, Organization, Project, ProjectMember, Target, Scan, Finding,
-    Report, ScanDiff,
+    Report, ScanDiff, AgentRun, HealthEvent, CredentialLeak,
+    NotificationChannelModel, ApprovalGate, ChatSession, ScopeDefinition,
 )
 
 
@@ -111,3 +112,86 @@ async def authorize_finding(finding_id: uuid.UUID, user: User, db: AsyncSession)
     # Delegate to scan authorization
     await authorize_scan(finding.scan_id, user, db)
     return finding
+
+
+async def authorize_report(report_id: uuid.UUID, user: User, db: AsyncSession) -> Report:
+    """Verify user has access to this report via scan→target→project chain."""
+    report = await db.get(Report, report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    await authorize_scan(report.scan_id, user, db)
+    return report
+
+
+async def authorize_credential(cred_id: uuid.UUID, user: User, db: AsyncSession) -> CredentialLeak:
+    """Verify user has access to this credential via scan→target→project chain."""
+    cred = await db.get(CredentialLeak, cred_id)
+    if not cred:
+        raise HTTPException(status_code=404, detail="Credential not found")
+    await authorize_scan(cred.scan_id, user, db)
+    return cred
+
+
+async def authorize_agent_run(agent_run_id: uuid.UUID, user: User, db: AsyncSession) -> AgentRun:
+    """Verify user has access to this agent run via scan→target→project chain."""
+    agent = await db.get(AgentRun, agent_run_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent run not found")
+    await authorize_scan(agent.scan_id, user, db)
+    return agent
+
+
+async def authorize_health_event(event_id: uuid.UUID, user: User, db: AsyncSession) -> HealthEvent:
+    """Verify user has access to this health event via scan→target→project chain."""
+    event = await db.get(HealthEvent, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Health event not found")
+    await authorize_scan(event.scan_id, user, db)
+    return event
+
+
+async def authorize_target(target_id: uuid.UUID, user: User, db: AsyncSession) -> Target:
+    """Verify user has access to this target via project→org chain."""
+    target = await db.get(Target, target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Target not found")
+    await authorize_project(target.project_id, user, db)
+    return target
+
+
+async def authorize_notification_channel(channel_id: uuid.UUID, user: User, db: AsyncSession):
+    """Verify user has access to this notification channel via project→org chain."""
+    channel = await db.get(NotificationChannelModel, channel_id)
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    await authorize_project(channel.project_id, user, db)
+    return channel
+
+
+async def authorize_gate(gate_id: uuid.UUID, user: User, db: AsyncSession) -> ApprovalGate:
+    """Verify user has access to this approval gate via scan→target→project chain."""
+    gate = await db.get(ApprovalGate, gate_id)
+    if not gate:
+        raise HTTPException(status_code=404, detail="Gate not found")
+    await authorize_scan(gate.scan_id, user, db)
+    return gate
+
+
+async def authorize_chat_session(session_id: uuid.UUID, user: User, db: AsyncSession) -> ChatSession:
+    """Verify user has access to this chat session."""
+    session = await db.get(ChatSession, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    # Chat sessions are user-scoped
+    if session.user_id != user.id and not (user.role and user.role.value == "admin"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    return session
+
+
+async def authorize_scope_item(item_id: uuid.UUID, user: User, db: AsyncSession) -> ScopeDefinition:
+    """Verify user has access to this scope item via project→org chain."""
+    item = await db.get(ScopeDefinition, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Scope item not found")
+    await authorize_project(item.project_id, user, db)
+    return item

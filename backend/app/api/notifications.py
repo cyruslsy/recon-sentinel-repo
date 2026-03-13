@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.auth import get_current_user
-from app.core.authorization import authorize_project
+from app.core.authorization import authorize_project, authorize_notification_channel
 from app.models.models import User, NotificationChannelModel, NotificationLog
 from app.schemas.schemas import NotificationChannelCreate, NotificationChannelResponse, NotificationChannelUpdate
 
@@ -68,9 +68,7 @@ async def update_channel(channel_id: UUID, data: NotificationChannelUpdate, user
 
 @router.delete("/channels/{channel_id}", status_code=204)
 async def delete_channel(channel_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    channel = await db.get(NotificationChannelModel, channel_id)
-    if not channel:
-        raise HTTPException(status_code=404, detail="Channel not found")
+    channel = await authorize_notification_channel(channel_id, user, db)
     await db.delete(channel)
     await db.commit()
 

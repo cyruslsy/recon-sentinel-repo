@@ -69,8 +69,11 @@ async def list_messages(
     session_id: UUID,
     limit: int = Query(50, le=200),
     offset: int = 0,
+    user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.core.authorization import authorize_chat_session
+    await authorize_chat_session(session_id, user, db)
     result = await db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
@@ -82,6 +85,8 @@ async def list_messages(
 
 @router.post("/sessions/{session_id}/messages", response_model=ChatMessageResponse, status_code=201)
 async def send_message(session_id: UUID, data: ChatMessageCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    from app.core.authorization import authorize_chat_session
+    await authorize_chat_session(session_id, user, db)
     """
     Send a user message to the AI Copilot.
     

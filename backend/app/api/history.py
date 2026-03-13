@@ -47,6 +47,12 @@ async def list_diff_items(
     diff_id: UUID, change_type: str | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """List individual changes in a diff."""
+    # Authorize via diff → scan chain
+    diff = await db.get(ScanDiff, diff_id)
+    if not diff:
+        raise HTTPException(status_code=404, detail="Diff not found")
+    await authorize_scan(diff.scan_id, user, db)
+
     q = select(ScanDiffItem).where(ScanDiffItem.diff_id == diff_id)
     if change_type:
         q = q.where(ScanDiffItem.change_type == change_type)

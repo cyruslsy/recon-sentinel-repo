@@ -50,21 +50,18 @@ async def add_scope_item(project_id: UUID, data: ScopeItemCreate, user: User = D
 @router.patch("/{item_id}", response_model=ScopeItemResponse)
 async def update_scope_item(item_id: UUID, data: ScopeItemUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Toggle a scope item between in_scope and out_of_scope."""
-    item = await db.get(ScopeDefinition, item_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="Scope item not found")
+    from app.core.authorization import authorize_scope_item
+    item = await authorize_scope_item(item_id, user, db)
     item.status = data.status
     await db.commit()
     await db.refresh(item)
-    logger.info(f"Scope item added: {data.item_value} to project {project_id}")
     return item
 
 
 @router.delete("/{item_id}", status_code=204)
 async def delete_scope_item(item_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    item = await db.get(ScopeDefinition, item_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="Scope item not found")
+    from app.core.authorization import authorize_scope_item
+    item = await authorize_scope_item(item_id, user, db)
     await db.delete(item)
     await db.commit()
 

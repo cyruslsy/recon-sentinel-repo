@@ -161,6 +161,7 @@ async def delete_scan(scan_id: UUID, user: User = Depends(get_current_user), db:
 
 @router.get("/{scan_id}/gates", response_model=list[ApprovalGateResponse])
 async def list_gates(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await authorize_scan(scan_id, user, db)
     result = await db.execute(
         select(ApprovalGate).where(ApprovalGate.scan_id == scan_id).order_by(ApprovalGate.gate_number)
     )
@@ -169,6 +170,7 @@ async def list_gates(scan_id: UUID, user: User = Depends(get_current_user), db: 
 
 @router.get("/{scan_id}/gates/{gate_number}", response_model=ApprovalGateResponse)
 async def get_gate(scan_id: UUID, gate_number: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    await authorize_scan(scan_id, user, db)
     result = await db.execute(
         select(ApprovalGate).where(ApprovalGate.scan_id == scan_id, ApprovalGate.gate_number == gate_number)
     )
@@ -183,6 +185,7 @@ async def decide_gate(
     scan_id: UUID, gate_number: int, data: ApprovalGateDecision, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Submit human decision at an approval gate. Resumes the scan pipeline."""
+    await authorize_scan(scan_id, user, db)
     result = await db.execute(
         select(ApprovalGate).where(ApprovalGate.scan_id == scan_id, ApprovalGate.gate_number == gate_number)
     )

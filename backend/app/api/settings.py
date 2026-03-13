@@ -21,7 +21,7 @@ router = APIRouter()
 
 @router.get("/api-keys", response_model=list[ApiKeyResponse])
 async def list_api_keys(project_id: UUID | None = None, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    q = select(ApiKey).order_by(ApiKey.service_name)
+    q = select(ApiKey).where(ApiKey.created_by == user.id).order_by(ApiKey.service_name)
     if project_id:
         q = q.where(ApiKey.project_id == project_id)
     result = await db.execute(q)
@@ -160,6 +160,8 @@ async def get_engine(engine_id: UUID, user: User = Depends(get_current_user), db
     engine = await db.get(ScanEngine, engine_id)
     if not engine:
         raise HTTPException(status_code=404, detail="Scan engine not found")
+    if engine.created_by != user.id and not (user.role and user.role.value == "admin"):
+        raise HTTPException(status_code=403, detail="Access denied")
     return engine
 
 
@@ -168,6 +170,8 @@ async def update_engine(engine_id: UUID, data: ScanEngineCreate, user: User = De
     engine = await db.get(ScanEngine, engine_id)
     if not engine:
         raise HTTPException(status_code=404, detail="Scan engine not found")
+    if engine.created_by != user.id and not (user.role and user.role.value == "admin"):
+        raise HTTPException(status_code=403, detail="Access denied")
     for key, value in data.model_dump().items():
         setattr(engine, key, value)
     await db.commit()
@@ -180,6 +184,8 @@ async def delete_engine(engine_id: UUID, user: User = Depends(get_current_user),
     engine = await db.get(ScanEngine, engine_id)
     if not engine:
         raise HTTPException(status_code=404, detail="Scan engine not found")
+    if engine.created_by != user.id and not (user.role and user.role.value == "admin"):
+        raise HTTPException(status_code=403, detail="Access denied")
     await db.delete(engine)
     await db.commit()
 

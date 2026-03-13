@@ -60,6 +60,7 @@ async def list_findings(
 @router.get("/stats")
 async def finding_stats(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Aggregate stats for dashboard: count by severity, type, MITRE technique."""
+    await authorize_scan(scan_id, user, db)
     result = await db.execute(
         select(
             Finding.severity,
