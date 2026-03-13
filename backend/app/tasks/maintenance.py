@@ -167,11 +167,17 @@ def retest_single_finding(finding_id: str, scan_id: str, template_id: str, targe
 
 async def _retest_finding(finding_id: str, scan_id: str, template_id: str, target_url: str) -> dict:
     """Run a targeted Nuclei scan for a single template+target and update the finding."""
-    import subprocess
+    import re
+    import asyncio
     import uuid
     import json as _json
     from app.core.database import AsyncSessionLocal
     from app.models.models import Finding
+
+    # P1 FIX: Validate template_id to prevent path traversal and injection
+    if not re.match(r'^[a-zA-Z0-9/_.\-]+$', template_id):
+        logger.warning(f"Retest blocked: invalid template_id '{template_id[:50]}'")
+        return {"status": "error", "error": "Invalid template_id format"}
 
     if not target_url.startswith("http"):
         target_url = f"https://{target_url}"
@@ -187,10 +193,16 @@ async def _retest_finding(finding_id: str, scan_id: str, template_id: str, targe
         "-retries", "2",
     ]
 
+    # P2 FIX: Use asyncio subprocess instead of subprocess.run (Amendment #10)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        output = result.stdout.strip()
-    except (subprocess.TimeoutExpired, Exception) as e:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        output = stdout.decode("utf-8", errors="replace").strip()
+    except (asyncio.TimeoutError, Exception) as e:
         logger.error(f"Retest failed for finding {finding_id}: {e}")
         return {"status": "error", "error": str(e)}
 

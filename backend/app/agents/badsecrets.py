@@ -128,21 +128,25 @@ class BadSecretsAgent(BaseAgent):
             has_badsecrets = False
             logger.warning("badsecrets library not installed — falling back to regex-based detection")
 
-        for i, host in enumerate(web_hosts):
-            try:
-                if has_badsecrets:
-                    host_findings = await self._check_with_badsecrets(host, modules_loaded)
-                else:
-                    host_findings = await self._check_with_regex(host)
+        # Reuse a single httpx client across all hosts (R10 P2 fix)
+        import warnings
+        warnings.filterwarnings("ignore", message="Unverified HTTPS request")
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True, verify=False) as client:
+            for i, host in enumerate(web_hosts):
+                try:
+                    if has_badsecrets:
+                        host_findings = await self._check_with_badsecrets(host, modules_loaded, client)
+                    else:
+                        host_findings = await self._check_with_regex(host, client)
 
-                findings.extend(host_findings)
-            except Exception as e:
-                logger.debug(f"Error checking {host}: {e}")
+                    findings.extend(host_findings)
+                except Exception as e:
+                    logger.debug(f"Error checking {host}: {e}")
 
-            if i % 10 == 0:
-                await self.report_progress(
-                    10 + int(80 * i / max(len(web_hosts), 1)),
-                    f"Checked {i+1}/{len(web_hosts)} — {len(findings)} secrets found",
+                if i % 10 == 0:
+                    await self.report_progress(
+                        10 + int(80 * i / max(len(web_hosts), 1)),
+                        f"Checked {i+1}/{len(web_hosts)} — {len(findings)} secrets found",
                 )
 
         if findings:
@@ -157,142 +161,140 @@ class BadSecretsAgent(BaseAgent):
 
         return findings
 
-    async def _check_with_badsecrets(self, url: str, modules_loaded: dict) -> list[dict]:
+    async def _check_with_badsecrets(self, url: str, modules_loaded: dict, client: httpx.AsyncClient) -> list[dict]:
         """Use the badsecrets library for comprehensive detection."""
         findings = []
 
         try:
-            async with httpx.AsyncClient(timeout=10, follow_redirects=True, verify=False) as client:
-                resp = await client.get(url)
+            resp = await client.get(url)
 
-                # Use badsecrets carve_all_modules to check all frameworks
-                from badsecrets.base import check_all_modules
-                results = check_all_modules(resp.text, url=url)
+            # Use badsecrets carve_all_modules to check all frameworks
+            from badsecrets.base import check_all_modules
+            results = check_all_modules(resp.text, url=url)
 
-                for r in results:
-                    detecting_module = r.get("detecting_module", "unknown")
-                    secret = r.get("secret", "")
-                    description = r.get("description", {})
-                    product = description.get("product", detecting_module)
+            for r in results:
+                detecting_module = r.get("detecting_module", "unknown")
+                secret = r.get("secret", "")
+                description = r.get("description", {})
+                product = description.get("product", detecting_module)
 
-                    severity = MODULE_SEVERITY.get(detecting_module, FindingSeverity.HIGH)
-                    mitre_ids = MODULE_MITRE.get(detecting_module, ["T1078", "T1190"])
+                severity = MODULE_SEVERITY.get(detecting_module, FindingSeverity.HIGH)
+                mitre_ids = MODULE_MITRE.get(detecting_module, ["T1078", "T1190"])
 
-                    fp = hashlib.sha256(
-                        f"badsecret:{detecting_module}:{url}:{secret[:20]}".encode()
-                    ).hexdigest()[:32]
+                fp = hashlib.sha256(
+                    f"badsecret:{detecting_module}:{url}:{secret[:20]}".encode()
+                ).hexdigest()[:32]
 
-                    findings.append({
-                        "finding_type": FindingType.VULNERABILITY,
-                        "severity": severity,
-                        "value": f"KNOWN SECRET: {product} — {url}",
-                        "detail": (
-                            f"Known {product} secret detected via {detecting_module}. "
-                            f"Secret: '{secret[:40]}{'...' if len(secret) > 40 else ''}'. "
-                            f"This typically leads to {'RCE via deserialization' if severity == FindingSeverity.CRITICAL else 'session forgery / privilege escalation'}."
-                        ),
-                        "mitre_technique_ids": sorted(set(mitre_ids)),
-                        "fingerprint": fp,
-                        "tags": [
-                            "badsecrets", "known_secret",
-                            detecting_module.lower(),
-                            "rce" if severity == FindingSeverity.CRITICAL else "auth_bypass",
-                        ],
-                        "raw_data": {
-                            "detecting_module": detecting_module,
-                            "url": url,
-                            "product": product,
-                            "secret_preview": secret[:20] + "..." if len(secret) > 20 else secret,
-                            "description": description,
-                        },
-                    })
+                findings.append({
+                    "finding_type": FindingType.VULNERABILITY,
+                    "severity": severity,
+                    "value": f"KNOWN SECRET: {product} — {url}",
+                    "detail": (
+                        f"Known {product} secret detected via {detecting_module}. "
+                        f"Secret: '{secret[:40]}{'...' if len(secret) > 40 else ''}'. "
+                        f"This typically leads to {'RCE via deserialization' if severity == FindingSeverity.CRITICAL else 'session forgery / privilege escalation'}."
+                    ),
+                    "mitre_technique_ids": sorted(set(mitre_ids)),
+                    "fingerprint": fp,
+                    "tags": [
+                        "badsecrets", "known_secret",
+                        detecting_module.lower(),
+                        "rce" if severity == FindingSeverity.CRITICAL else "auth_bypass",
+                    ],
+                    "raw_data": {
+                        "detecting_module": detecting_module,
+                        "url": url,
+                        "product": product,
+                        "secret_preview": secret[:20] + "..." if len(secret) > 20 else secret,
+                        "description": description,
+                    },
+                })
 
         except httpx.RequestError:
             pass
 
         return findings
 
-    async def _check_with_regex(self, url: str) -> list[dict]:
+    async def _check_with_regex(self, url: str, client: httpx.AsyncClient) -> list[dict]:
         """Fallback: regex-based detection for common known-secret indicators.
         Less comprehensive than badsecrets library but catches the most critical cases."""
         import re
         findings = []
 
         try:
-            async with httpx.AsyncClient(timeout=10, follow_redirects=True, verify=False) as client:
-                resp = await client.get(url)
-                body = resp.text[:50000]  # First 50KB
-                headers = dict(resp.headers)
+            resp = await client.get(url)
+            body = resp.text[:50000]  # First 50KB
+            headers = dict(resp.headers)
 
-                # Check 1: ASP.NET ViewState present (potential for known key check)
-                viewstate_match = re.search(
-                    r'__VIEWSTATE[^>]*value="([A-Za-z0-9+/=]{20,})"', body
-                )
-                generator_match = re.search(
-                    r'__VIEWSTATEGENERATOR[^>]*value="([A-Fa-f0-9]{8})"', body
-                )
-                if viewstate_match and generator_match:
+            # Check 1: ASP.NET ViewState present (potential for known key check)
+            viewstate_match = re.search(
+                r'__VIEWSTATE[^>]*value="([A-Za-z0-9+/=]{20,})"', body
+            )
+            generator_match = re.search(
+                r'__VIEWSTATEGENERATOR[^>]*value="([A-Fa-f0-9]{8})"', body
+            )
+            if viewstate_match and generator_match:
+                fp = hashlib.sha256(
+                    f"viewstate:{url}:{generator_match.group(1)}".encode()
+                ).hexdigest()[:32]
+                findings.append({
+                    "finding_type": FindingType.VULNERABILITY,
+                    "severity": FindingSeverity.MEDIUM,
+                    "value": f"ASP.NET ViewState detected — {url}",
+                    "detail": (
+                        f"ASP.NET ViewState with generator {generator_match.group(1)} found. "
+                        f"Install badsecrets library for full known-key checking. "
+                        f"If MachineKey is known, this leads to RCE via deserialization."
+                    ),
+                    "mitre_technique_ids": ["T1190"],
+                    "fingerprint": fp,
+                    "tags": ["badsecrets", "viewstate", "aspnet", "needs_badsecrets_lib"],
+                    "raw_data": {
+                        "url": url,
+                        "generator": generator_match.group(1),
+                        "viewstate_length": len(viewstate_match.group(1)),
+                    },
+                })
+
+            # Check 2: Telerik indicators
+            if "Telerik.Web.UI" in body or "telerik" in body.lower():
+                fp = hashlib.sha256(f"telerik:{url}".encode()).hexdigest()[:32]
+                findings.append({
+                    "finding_type": FindingType.VULNERABILITY,
+                    "severity": FindingSeverity.MEDIUM,
+                    "value": f"Telerik UI detected — {url}",
+                    "detail": (
+                        f"Telerik Web UI components detected. Install badsecrets library "
+                        f"for known encryption/hash key checking. Known Telerik keys "
+                        f"lead to arbitrary file upload → RCE."
+                    ),
+                    "mitre_technique_ids": ["T1190"],
+                    "fingerprint": fp,
+                    "tags": ["badsecrets", "telerik", "needs_badsecrets_lib"],
+                    "raw_data": {"url": url},
+                })
+
+            # Check 3: Flask/Express session cookies with weak signatures
+            for cookie_name, cookie_val in resp.cookies.items():
+                # Flask sessions start with eyJ (base64 JSON) followed by a dot-separated signature
+                if cookie_val.startswith("eyJ") and cookie_val.count(".") >= 1:
                     fp = hashlib.sha256(
-                        f"viewstate:{url}:{generator_match.group(1)}".encode()
+                        f"session:{url}:{cookie_name}".encode()
                     ).hexdigest()[:32]
                     findings.append({
                         "finding_type": FindingType.VULNERABILITY,
-                        "severity": FindingSeverity.MEDIUM,
-                        "value": f"ASP.NET ViewState detected — {url}",
+                        "severity": FindingSeverity.LOW,
+                        "value": f"Signed session cookie detected — {url}",
                         "detail": (
-                            f"ASP.NET ViewState with generator {generator_match.group(1)} found. "
-                            f"Install badsecrets library for full known-key checking. "
-                            f"If MachineKey is known, this leads to RCE via deserialization."
+                            f"Signed session cookie '{cookie_name}' found. "
+                            f"Install badsecrets library for known secret key checking. "
+                            f"Weak signing keys allow session forgery."
                         ),
-                        "mitre_technique_ids": ["T1190"],
+                        "mitre_technique_ids": ["T1078"],
                         "fingerprint": fp,
-                        "tags": ["badsecrets", "viewstate", "aspnet", "needs_badsecrets_lib"],
-                        "raw_data": {
-                            "url": url,
-                            "generator": generator_match.group(1),
-                            "viewstate_length": len(viewstate_match.group(1)),
-                        },
+                        "tags": ["badsecrets", "session_cookie", "needs_badsecrets_lib"],
+                        "raw_data": {"url": url, "cookie_name": cookie_name},
                     })
-
-                # Check 2: Telerik indicators
-                if "Telerik.Web.UI" in body or "telerik" in body.lower():
-                    fp = hashlib.sha256(f"telerik:{url}".encode()).hexdigest()[:32]
-                    findings.append({
-                        "finding_type": FindingType.VULNERABILITY,
-                        "severity": FindingSeverity.MEDIUM,
-                        "value": f"Telerik UI detected — {url}",
-                        "detail": (
-                            f"Telerik Web UI components detected. Install badsecrets library "
-                            f"for known encryption/hash key checking. Known Telerik keys "
-                            f"lead to arbitrary file upload → RCE."
-                        ),
-                        "mitre_technique_ids": ["T1190"],
-                        "fingerprint": fp,
-                        "tags": ["badsecrets", "telerik", "needs_badsecrets_lib"],
-                        "raw_data": {"url": url},
-                    })
-
-                # Check 3: Flask/Express session cookies with weak signatures
-                for cookie_name, cookie_val in resp.cookies.items():
-                    # Flask sessions start with eyJ (base64 JSON) followed by a dot-separated signature
-                    if cookie_val.startswith("eyJ") and cookie_val.count(".") >= 1:
-                        fp = hashlib.sha256(
-                            f"session:{url}:{cookie_name}".encode()
-                        ).hexdigest()[:32]
-                        findings.append({
-                            "finding_type": FindingType.VULNERABILITY,
-                            "severity": FindingSeverity.LOW,
-                            "value": f"Signed session cookie detected — {url}",
-                            "detail": (
-                                f"Signed session cookie '{cookie_name}' found. "
-                                f"Install badsecrets library for known secret key checking. "
-                                f"Weak signing keys allow session forgery."
-                            ),
-                            "mitre_technique_ids": ["T1078"],
-                            "fingerprint": fp,
-                            "tags": ["badsecrets", "session_cookie", "needs_badsecrets_lib"],
-                            "raw_data": {"url": url, "cookie_name": cookie_name},
-                        })
 
         except httpx.RequestError:
             pass

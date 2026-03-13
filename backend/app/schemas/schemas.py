@@ -12,7 +12,7 @@ Naming convention:
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -316,9 +316,9 @@ class FindingUpdate(BaseModel):
     user_notes: Optional[str] = None
     assigned_to: Optional[uuid.UUID] = None
     tags: Optional[list[str]] = None
-    verification_status: Optional[str] = None  # unverified, confirmed, false_positive, disputed
-    severity_override: Optional[str] = None     # critical, high, medium, low, info — overrides scanner severity
-    severity_override_reason: Optional[str] = None  # justification (e.g., "compensating control in place")
+    verification_status: Optional[Literal["unverified", "confirmed", "false_positive", "disputed", "remediated"]] = None
+    severity_override: Optional[Literal["critical", "high", "medium", "low", "info"]] = None
+    severity_override_reason: Optional[str] = None
 
 class FindingBulkAction(BaseModel):
     finding_ids: list[uuid.UUID]

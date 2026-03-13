@@ -3,6 +3,12 @@ Recon Sentinel — Directory & File Discovery Agent
 Tool: ffuf (primary)
 MITRE: T1190 (Exploit Public-Facing Application), T1078 (Valid Accounts — admin panels)
 
+Wordlist strategy (tiered, tech-adaptive):
+  Tier 1: Base wordlist sized by scan profile (quick=common.txt, full=raft-medium, bounty=raft-large)
+  Tier 2: Tech-adaptive lists added when technologies detected (WordPress, Spring, PHP, etc.)
+  Tier 3: Sensitive file checks (always included — .git, .env, backup.sql, etc.)
+  Tier 4: User-uploaded custom wordlists (from scan config)
+
 Self-correction:
   - Custom 404 detection → re-run with -fs {size}
   - WAF blocking → reduce rate + rotate user-agent
@@ -11,6 +17,9 @@ Self-correction:
 
 import hashlib
 import logging
+import os
+import tempfile
+import uuid
 
 from app.agents.base import BaseAgent
 from app.agents.corrections import (
@@ -19,6 +28,7 @@ from app.agents.corrections import (
 from app.core.celery_app import celery_app
 from app.core.database import AsyncSessionLocal
 from app.models.enums import FindingSeverity, FindingType, HealthEventType, ScanPhase
+from app.models.models import Finding
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +39,73 @@ ADMIN_PATHS = {
 }
 
 INTERESTING_EXTENSIONS = {".bak", ".sql", ".zip", ".tar.gz", ".env", ".config", ".xml", ".json", ".yml"}
+
+# ─── Wordlist Configuration ──────────────────────────────────
+
+# Tier 1: Base wordlists by scan profile (SecLists paths)
+PROFILE_WORDLISTS = {
+    "quick": ["/usr/share/seclists/Discovery/Web-Content/common.txt"],
+    "passive_only": ["/usr/share/seclists/Discovery/Web-Content/common.txt"],
+    "stealth": ["/usr/share/seclists/Discovery/Web-Content/common.txt"],
+    "full": [
+        "/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt",
+        "/usr/share/seclists/Discovery/Web-Content/raft-medium-files.txt",
+    ],
+    "bounty": [
+        "/usr/share/seclists/Discovery/Web-Content/raft-large-directories.txt",
+        "/usr/share/seclists/Discovery/Web-Content/raft-large-files.txt",
+    ],
+}
+
+# Tier 2: Tech-adaptive wordlists (added when technology is detected)
+TECH_WORDLISTS = {
+    "wordpress": "/usr/share/seclists/Discovery/Web-Content/CMS/wordpress.fuzz.txt",
+    "wp-admin": "/usr/share/seclists/Discovery/Web-Content/CMS/wordpress.fuzz.txt",
+    "joomla": "/usr/share/seclists/Discovery/Web-Content/CMS/joomla.txt",
+    "drupal": "/usr/share/seclists/Discovery/Web-Content/CMS/drupal.txt",
+    "php": "/usr/share/seclists/Discovery/Web-Content/PHP.fuzz.txt",
+    "laravel": "/usr/share/seclists/Discovery/Web-Content/PHP.fuzz.txt",
+    "spring": "/usr/share/seclists/Discovery/Web-Content/spring-boot.txt",
+    "java": "/usr/share/seclists/Discovery/Web-Content/spring-boot.txt",
+    "tomcat": "/usr/share/seclists/Discovery/Web-Content/tomcat.txt",
+    "iis": "/usr/share/seclists/Discovery/Web-Content/IIS.fuzz.txt",
+    "asp.net": "/usr/share/seclists/Discovery/Web-Content/IIS.fuzz.txt",
+    "nginx": "/usr/share/seclists/Discovery/Web-Content/nginx.txt",
+    "apache": "/usr/share/seclists/Discovery/Web-Content/apache.txt",
+    "api": "/usr/share/seclists/Discovery/Web-Content/api/api-endpoints.txt",
+    "graphql": "/usr/share/seclists/Discovery/Web-Content/graphql.txt",
+    "nodejs": "/usr/share/seclists/Discovery/Web-Content/nodejs.txt",
+    "express": "/usr/share/seclists/Discovery/Web-Content/nodejs.txt",
+    "django": "/usr/share/seclists/Discovery/Web-Content/django.txt",
+    "flask": "/usr/share/seclists/Discovery/Web-Content/flask.txt",
+    "ruby": "/usr/share/seclists/Discovery/Web-Content/ruby.txt",
+    "rails": "/usr/share/seclists/Discovery/Web-Content/ror.txt",
+}
+
+# Tier 3: Sensitive files that should always be checked (small, high-value)
+SENSITIVE_PATHS = [
+    ".git/HEAD", ".git/config", ".gitignore",
+    ".env", ".env.local", ".env.production", ".env.backup",
+    "web.config", ".htaccess", ".htpasswd",
+    "robots.txt", "sitemap.xml", "crossdomain.xml",
+    ".well-known/security.txt", ".well-known/openid-configuration",
+    "wp-config.php.bak", "config.php.bak", "database.yml",
+    "backup.sql", "dump.sql", "db.sql", "data.sql",
+    "backup.zip", "backup.tar.gz", "site.zip",
+    "phpinfo.php", "info.php", "test.php",
+    "server-status", "server-info",
+    ".DS_Store", "Thumbs.db",
+    "package.json", "composer.json", "Gemfile",
+    ".svn/entries", ".svn/wc.db",
+    ".hg/store/00manifest.i",
+    "CHANGELOG.md", "README.md", "LICENSE",
+    "Dockerfile", "docker-compose.yml",
+    "swagger.json", "openapi.json", "api-docs",
+    "graphql", "graphiql",
+    "wp-login.php", "administrator/index.php",
+    "elmah.axd", "trace.axd",
+    "actuator", "actuator/health", "actuator/env",
+]
 
 
 class DirFileAgent(BaseAgent):
@@ -51,11 +128,13 @@ class DirFileAgent(BaseAgent):
         if not target.startswith("http"):
             target = f"https://{target}"
 
-        wordlist = self.config.get("wordlist", "/usr/share/seclists/Discovery/Web-Content/common.txt")
+        # ─── Wordlist Assembly (tiered, tech-adaptive) ──────────
+        wordlist_path = await self._build_wordlist()
+        logger.info(f"Assembled wordlist at {wordlist_path}")
 
         # ─── Phase 1: Initial ffuf run ────────────────────────
         await self.report_progress(10, "Running ffuf...")
-        raw_results = await self._run_ffuf(target, wordlist)
+        raw_results = await self._run_ffuf(target, wordlist_path)
 
         # ─── Phase 2: Self-correction checks ──────────────────
         await self.report_progress(50, "Analyzing responses...")
@@ -85,7 +164,7 @@ class DirFileAgent(BaseAgent):
 
             # ─── Phase 3: Re-run with corrections ─────────────
             await self.report_progress(60, "Re-running with corrections...")
-            raw_results = await self._run_ffuf(target, wordlist)
+            raw_results = await self._run_ffuf(target, wordlist_path)
 
             # Verify correction worked
             new_corrections = self._check_for_anomalies(raw_results)
@@ -129,6 +208,108 @@ class DirFileAgent(BaseAgent):
             })
 
         return findings
+
+    # ─── Wordlist Assembly ──────────────────────────────────────
+
+    async def _build_wordlist(self) -> str:
+        """Build a merged wordlist from 4 tiers:
+        1. Base wordlist (profile-sized)
+        2. Tech-adaptive wordlists (from detected technologies)
+        3. Sensitive file paths (always included)
+        4. Custom user wordlists (from config)
+        Returns path to a temp file containing the merged, deduplicated wordlist."""
+        words = set()
+
+        # Tier 1: Base wordlist from scan profile
+        profile = self.config.get("profile", "full")
+        base_lists = PROFILE_WORDLISTS.get(profile, PROFILE_WORDLISTS["full"])
+
+        # Allow config override
+        if self.config.get("wordlist"):
+            base_lists = [self.config["wordlist"]]
+
+        for wl_path in base_lists:
+            if os.path.exists(wl_path):
+                try:
+                    with open(wl_path, "r", errors="ignore") as f:
+                        for line in f:
+                            word = line.strip()
+                            if word and not word.startswith("#"):
+                                words.add(word)
+                except OSError:
+                    logger.warning(f"Cannot read wordlist: {wl_path}")
+            else:
+                logger.warning(f"Wordlist not found: {wl_path}")
+
+        # Tier 2: Tech-adaptive wordlists from detected technologies
+        detected_techs = await self._detect_technologies()
+        tech_lists_added = []
+        for tech in detected_techs:
+            tech_lower = tech.lower()
+            for key, wl_path in TECH_WORDLISTS.items():
+                if key in tech_lower and os.path.exists(wl_path):
+                    if wl_path not in tech_lists_added:
+                        tech_lists_added.append(wl_path)
+                        try:
+                            with open(wl_path, "r", errors="ignore") as f:
+                                count_before = len(words)
+                                for line in f:
+                                    word = line.strip()
+                                    if word and not word.startswith("#"):
+                                        words.add(word)
+                                added = len(words) - count_before
+                                logger.info(f"Tech wordlist: +{added} paths from {wl_path} (detected: {tech})")
+                        except OSError:
+                            pass
+
+        # Tier 3: Sensitive file paths (always included)
+        for path in SENSITIVE_PATHS:
+            words.add(path)
+
+        # Tier 4: Custom user wordlists from config
+        custom_lists = self.config.get("custom_wordlists", [])
+        for custom_path in custom_lists:
+            if os.path.exists(custom_path):
+                try:
+                    with open(custom_path, "r", errors="ignore") as f:
+                        for line in f:
+                            word = line.strip()
+                            if word and not word.startswith("#"):
+                                words.add(word)
+                    logger.info(f"Custom wordlist: {custom_path}")
+                except OSError:
+                    pass
+
+        # Fallback if no wordlists loaded
+        if not words:
+            words = set(SENSITIVE_PATHS)
+            logger.warning("No wordlists loaded — using sensitive paths only")
+
+        # Write merged wordlist to temp file
+        fd, path = tempfile.mkstemp(suffix=".txt", prefix="recon_wordlist_")
+        with os.fdopen(fd, "w") as f:
+            f.write("\n".join(sorted(words)))
+
+        logger.info(f"Assembled wordlist: {len(words)} entries (profile={profile}, tech_lists={len(tech_lists_added)})")
+        return path
+
+    async def _detect_technologies(self) -> list[str]:
+        """Get technologies detected by earlier agents for this scan."""
+        techs = set()
+        async with AsyncSessionLocal() as db:
+            from sqlalchemy import select
+            result = await db.execute(
+                select(Finding.raw_data, Finding.tags)
+                .where(Finding.scan_id == uuid.UUID(self.scan_id))
+            )
+            for raw_data, tags in result.all():
+                if tags:
+                    for tag in tags:
+                        techs.add(tag)
+                if raw_data and isinstance(raw_data, dict):
+                    for tech in raw_data.get("tech_detected", []):
+                        techs.add(tech)
+        return list(techs)
 
     # ─── ffuf Execution ───────────────────────────────────────
 

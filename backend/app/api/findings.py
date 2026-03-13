@@ -157,13 +157,14 @@ async def export_findings_csv(
     severity: FindingSeverity | None = None,
     finding_type: FindingType | None = None,
     is_false_positive: bool | None = None,
+    limit: int = Query(default=5000, le=10000, ge=1),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Export findings as CSV. Pentesters need this for client deliverables mid-engagement."""
     await authorize_scan(scan_id, user, db)
 
-    q = select(Finding).where(Finding.scan_id == scan_id).order_by(Finding.severity, Finding.created_at)
+    q = select(Finding).where(Finding.scan_id == scan_id).order_by(Finding.severity, Finding.created_at).limit(limit)
     if severity:
         q = q.where(Finding.severity == severity)
     if finding_type:
@@ -173,6 +174,12 @@ async def export_findings_csv(
 
     result = await db.execute(q)
     findings = result.scalars().all()
+
+    def _sanitize_csv_cell(value: str) -> str:
+        """Prevent CSV injection: prefix cells starting with formula triggers."""
+        if value and value[0] in ('=', '+', '-', '@', '\t', '\r'):
+            return f"'{value}"
+        return value
 
     import csv
     import io
@@ -188,14 +195,14 @@ async def export_findings_csv(
             str(f.id),
             f.severity.value if f.severity else "",
             f.finding_type.value if f.finding_type else "",
-            f.value or "",
-            (f.detail or "")[:500],
+            _sanitize_csv_cell(f.value or ""),
+            _sanitize_csv_cell((f.detail or "")[:500]),
             ", ".join(f.mitre_technique_ids or []),
             ", ".join(f.tags or []),
             "Yes" if f.is_false_positive else "No",
             getattr(f, "verification_status", "unverified") or "unverified",
             getattr(f, "severity_override", "") or "",
-            getattr(f, "user_notes", "") or "",
+            _sanitize_csv_cell(getattr(f, "user_notes", "") or ""),
             str(f.created_at) if f.created_at else "",
         ])
 

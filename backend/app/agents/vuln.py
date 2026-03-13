@@ -134,8 +134,18 @@ class VulnAgent(BaseAgent):
         else:
             supp_results = []
 
+        # ─── Phase 6b: DAST fuzzing (unknown vulns — XSS, SQLi, SSRF, SSTI) ─
+        dast_results = []
+        if self.config.get("enable_dast", True):
+            # Collect parameterized URLs from earlier phases (endpoints, wayback, JS analysis)
+            dast_targets = await self._collect_dast_endpoints()
+            if dast_targets:
+                await self.report_progress(65, f"Running DAST fuzzing on {len(dast_targets)} parameterized endpoints...")
+                dast_results = await self._run_nuclei(dast_targets, mode="dast")
+                logger.info(f"DAST fuzzing: {len(dast_results)} results from {len(dast_targets)} endpoints")
+
         # Merge all results
-        raw_results = kev_results + auto_results + supp_results
+        raw_results = kev_results + auto_results + supp_results + dast_results
 
         if not raw_results:
             return []
@@ -297,6 +307,40 @@ class VulnAgent(BaseAgent):
 
         logger.info(f"WAF classification: {len(self._waf_hosts)} hosts behind WAF")
 
+    # ─── DAST Endpoint Collection ─────────────────────────────
+
+    async def _collect_dast_endpoints(self) -> list[str]:
+        """Collect parameterized URLs from earlier phases for DAST fuzzing.
+        Nuclei's -dast mode needs URLs with query parameters to fuzz.
+        Sources: endpoint findings, wayback URLs, JS-extracted endpoints."""
+        endpoints = set()
+
+        async with AsyncSessionLocal() as db:
+            from sqlalchemy import select
+            result = await db.execute(
+                select(Finding.value)
+                .where(Finding.scan_id == uuid.UUID(self.scan_id))
+                .where(Finding.finding_type.in_([
+                    FindingType.ENDPOINT,
+                    FindingType.DIRECTORY,
+                    FindingType.OTHER,
+                ]))
+            )
+            for r in result.all():
+                url = r[0].strip()
+                # Only include URLs with query parameters (needed for fuzzing)
+                if "?" in url and "=" in url:
+                    endpoints.add(url)
+                # Also include URLs that look like they accept path parameters
+                elif any(pattern in url for pattern in ["/api/", "/v1/", "/v2/", "/search", "/query"]):
+                    endpoints.add(url)
+
+        # Cap to prevent excessive fuzzing traffic
+        max_dast = self.config.get("max_dast_endpoints", 100)
+        endpoint_list = sorted(endpoints)[:max_dast]
+        logger.info(f"Collected {len(endpoint_list)} parameterized endpoints for DAST fuzzing")
+        return endpoint_list
+
     # ─── Template Selection ───────────────────────────────────
 
     async def _select_templates(self) -> list[str]:
@@ -388,14 +432,20 @@ class VulnAgent(BaseAgent):
             elif mode == "templates":
                 for tpl in self._templates:
                     cmd.extend(["-t", tpl])
+            elif mode == "dast":
+                cmd.append("-dast")  # DAST fuzzing for unknown XSS, SQLi, SSRF, SSTI, CRLF
+                cmd.extend(["-concurrency", "5"])  # Lower concurrency for fuzzing (more traffic per target)
 
             # Add severity filter if set (self-correction)
             if self._severity_filter:
                 cmd.extend(["-severity", self._severity_filter])
 
-            # Exclude noisy templates
-            exclude_tags = "dos,fuzz"
-            cmd.extend(["-exclude-tags", exclude_tags])
+            # Exclude noisy templates (but NOT for dast mode — fuzzing needs fuzz tag)
+            if mode != "dast":
+                exclude_tags = "dos,fuzz"
+                cmd.extend(["-exclude-tags", exclude_tags])
+            else:
+                cmd.extend(["-exclude-tags", "dos"])
 
             # Dynamic timeout: scale with target count
             # Base 300s + 10s per target, capped at 1800s (30 min)

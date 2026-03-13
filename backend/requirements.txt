@@ -32,6 +32,7 @@ pyyaml==6.0.*
 # ─── Report Generation ───────────────────────────────────────
 python-docx==1.1.*
 # weasyprint — install via system package for PDF support
+reportlab>=4.0
 
 # ─── Testing ──────────────────────────────────────────────────
 pytest==8.3.*
