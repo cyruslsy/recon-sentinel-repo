@@ -12,7 +12,7 @@ module.exports = {
           border: "#1E2A3A",
           hover: "#1A2435",
           text: "#E2E8F0",
-          muted: "#64748B",
+          muted: "#94A3B8",
           accent: "#3B82F6",
           green: "#22C55E",
           red: "#EF4444",

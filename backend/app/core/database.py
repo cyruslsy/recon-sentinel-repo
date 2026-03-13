@@ -90,24 +90,18 @@ async def get_db(request: Request = None) -> AsyncSession:
 
 
 async def get_db_with_rls(user_id: str) -> AsyncSession:
-    """
-    Database session with RLS context set.
-    Used by routes that need row-level security enforcement:
-    
-        from app.core.auth import get_current_user
-        
-        @router.get("/sensitive")
-        async def sensitive_data(user = Depends(get_current_user)):
-            async for db in get_db_with_rls(str(user.id)):
-                result = await db.execute(select(Finding))  # RLS filters automatically
-    """
+    """Database session with RLS context set inside a transaction."""
     async with AsyncSessionLocal() as session:
-        try:
-            await session.execute(
-                text("SET LOCAL app.current_user_id = :uid"),
-                {"uid": user_id},
-            )
-            yield session
+        async with session.begin():
+            try:
+                await session.execute(
+                    text("SET LOCAL app.current_user_id = :uid"),
+                    {"uid": user_id},
+                )
+                yield session
+            except Exception:
+                await session.rollback()
+                raise
         finally:
             await session.close()
 

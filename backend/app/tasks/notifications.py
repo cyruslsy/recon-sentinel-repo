@@ -143,8 +143,6 @@ def _resolve_and_check(hostname: str) -> tuple[bool, str]:
 
     return True, ""
 
-    return True, ""
-
 
 # ─── Main Dispatch ────────────────────────────────────────────
 

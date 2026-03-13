@@ -84,18 +84,14 @@ async def finding_stats(scan_id: UUID, user: User = Depends(get_current_user), d
 
 @router.get("/{finding_id}", response_model=FindingResponse)
 async def get_finding(finding_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    finding = await db.get(Finding, finding_id)
-    if not finding:
-        raise HTTPException(status_code=404, detail="Finding not found")
+    finding = await authorize_finding(finding_id, user, db)
     return finding
 
 
 @router.patch("/{finding_id}", response_model=FindingResponse)
 async def update_finding(finding_id: UUID, data: FindingUpdate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Update finding: mark false positive, add notes, assign to user, update tags."""
-    finding = await db.get(Finding, finding_id)
-    if not finding:
-        raise HTTPException(status_code=404, detail="Finding not found")
+    finding = await authorize_finding(finding_id, user, db)
     
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():

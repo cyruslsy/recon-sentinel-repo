@@ -68,6 +68,20 @@ async def scan_websocket(websocket: WebSocket, scan_id: str, token: str | None =
         await websocket.close(code=4001, reason="Authentication required")
         return
 
+    # Verify user has access to this scan (multi-tenant isolation)
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.core.authorization import authorize_scan
+        from app.models.models import User
+        import uuid
+        async with AsyncSessionLocal() as db:
+            user = await db.get(User, uuid.UUID(user_id))
+            if user:
+                await authorize_scan(uuid.UUID(scan_id), user, db)
+    except Exception:
+        await websocket.close(code=4003, reason="Access denied to this scan")
+        return
+
     await manager.connect(websocket, scan_id)
     
     try:
@@ -129,15 +143,18 @@ async def chat_websocket(websocket: WebSocket, session_id: str):
     WebSocket for AI Copilot Chat streaming.
     Requires JWT token via ?token= query parameter.
     """
-    # Authenticate via token query param (same as scan WebSocket)
+    # Authenticate via token query param (same pattern as scan WebSocket)
     token = websocket.query_params.get("token")
     if not token:
         await websocket.close(code=4001, reason="Missing token")
         return
     try:
-        from app.core.auth import verify_access_token
-        user = await verify_access_token(token)
-        if not user:
+        from jose import jwt, JWTError
+        from app.core.config import get_settings
+        s = get_settings()
+        payload = jwt.decode(token, s.JWT_SECRET_KEY, algorithms=[s.JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
             await websocket.close(code=4001, reason="Invalid token")
             return
     except Exception:

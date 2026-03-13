@@ -59,15 +59,17 @@ export default function HealthFeedPage() {
     }
   }, [lastEvent]);
 
-  // Filter events
-  const filtered = events.filter(e => {
-    if (filter === "all") return true;
-    if (filter === "anomalies") return e.event_type === "anomaly_detected";
-    if (filter === "corrections") return e.event_type === "correction_success";
-    if (filter === "resolved") return e.event_type === "correction_success" || e.user_decision;
-    if (filter === "needs_action") return e.event_type === "escalate_user" && !e.user_decision;
-    return true;
-  });
+  // Filter and sort events chronologically for correct timeline connections
+  const filtered = events
+    .filter(e => {
+      if (filter === "all") return true;
+      if (filter === "anomalies") return e.event_type === "anomaly_detected";
+      if (filter === "corrections") return e.event_type === "correction_success";
+      if (filter === "resolved") return e.event_type === "correction_success" || e.user_decision;
+      if (filter === "needs_action") return e.event_type === "escalate_user" && !e.user_decision;
+      return true;
+    })
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return (
     <AppLayout>

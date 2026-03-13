@@ -71,7 +71,7 @@ def get_settings() -> Settings:
     else:
         db_url = db_url_base
 
-    return Settings(
+    settings = Settings(
         DATABASE_URL=db_url,
         REDIS_URL=os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
         CELERY_BROKER_URL=os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/1"),
@@ -91,6 +91,8 @@ def get_settings() -> Settings:
     WEAK_SECRETS = {"CHANGE-ME-IN-PRODUCTION", "secret", "changeme", "test", ""}
     if settings.JWT_SECRET_KEY in WEAK_SECRETS and settings.APP_ENV != "development":
         raise RuntimeError(
-            f"FATAL: JWT_SECRET_KEY is set to a known weak value ('{settings.JWT_SECRET_KEY[:10]}...'). "
+            f"FATAL: JWT_SECRET_KEY is set to a known weak value. "
             "Set a strong secret via Docker secret (secrets/jwt_secret) or JWT_SECRET_KEY env var."
         )
+
+    return settings
