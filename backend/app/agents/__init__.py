@@ -19,5 +19,10 @@ from app.agents.osint import OSINTAgent, run_osint_agent  # noqa: F401
 # Sprint E agent
 from app.agents.vuln import VulnAgent, run_vuln_agent  # noqa: F401
 
+# Gap-closing agents
+from app.agents.cloud import CloudAssetAgent, run_cloud_agent  # noqa: F401
+from app.agents.js_analysis import JSAnalysisAgent, run_js_analysis_agent  # noqa: F401
+from app.agents.subdomain_takeover import SubdomainTakeoverAgent, run_subdomain_takeover_agent  # noqa: F401
+
 # Self-correction patterns
 from app.agents.corrections import detect_anomalies  # noqa: F401

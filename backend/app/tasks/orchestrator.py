@@ -171,6 +171,8 @@ class ScanOrchestrator:
             "app.agents.web_recon.run_web_recon_agent",
             "app.agents.ssl_tls.run_ssl_tls_agent",
             "app.agents.dir_file.run_dir_file_agent",
+            "app.agents.cloud.run_cloud_agent",
+            "app.agents.js_analysis.run_js_analysis_agent",
         ]
         if self.state.gate_1_modifications:
             skip = self.state.gate_1_modifications.get("skip_agents", [])
@@ -180,7 +182,10 @@ class ScanOrchestrator:
 
     async def _run_vuln(self) -> None:
         await self._update_scan(ScanPhase.VULN)
-        agents = ["app.agents.vuln.run_vuln_agent"]
+        agents = [
+            "app.agents.vuln.run_vuln_agent",
+            "app.agents.subdomain_takeover.run_subdomain_takeover_agent",
+        ]
 
         # Apply re-plan modifications (may have added/skipped agents)
         for decision in self.state.replan_decisions:

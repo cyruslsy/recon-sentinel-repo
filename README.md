@@ -38,7 +38,7 @@ cd frontend && npm install && npm run dev
 - Docker secrets for all sensitive values (DB password, JWT key, API keys)
 - Container hardening: cap_drop ALL, NET_RAW only, read_only, no-new-privileges
 
-**9 Scanning Agents (Weeks 2 + 5)**
+**13 Scanning Agents (Weeks 2 + 5 + Sprint E)**
 
 | Agent | Phase | Tool | MITRE |
 |-------|-------|------|-------|
@@ -51,6 +51,10 @@ cd frontend && npm install && npm run dev
 | Web Reconnaissance | Active | httpx + GoWitness | T1592 |
 | SSL/TLS Analysis | Active | OpenSSL | T1190 |
 | Dir/File Discovery | Active | ffuf | T1190, T1078 |
+| Vulnerability Scanner | Vuln | Nuclei | T1190 |
+| Cloud Asset Discovery | Active | DNS CNAME + S3/Azure/GCP HTTP | T1580, T1530 |
+| JavaScript Analysis | Active | httpx + regex | T1552, T1190 |
+| Subdomain Takeover | Vuln | DNS + HTTP fingerprint | T1584 |
 
 All agents inherit from `BaseAgent` which enforces: async subprocess execution, scope checking, progress reporting via WebSocket, finding creation with MITRE tags, and self-correction retry loops.
 
@@ -111,7 +115,7 @@ React (Next.js 14)  →  Nginx  →  FastAPI (88 endpoints)
      ↕ WebSocket              ↕
                          PostgreSQL 16 + Redis 7
                               ↕
-                    Celery Workers (9 agents)
+                    Celery Workers (13 agents)
                               ↕
                     LiteLLM (Claude / Ollama)
 ```
@@ -125,12 +129,14 @@ POST /scans → Celery: start_scan()
     → AI summarizes findings → Approval Gate #1 → PAUSE
 
 User approves → POST /scans/{id}/gates/1/decide
-  → Phase 2: ACTIVE (4 agents in parallel)
-    → Port Scan + Web Recon + SSL/TLS + Dir/File
+  → Phase 2: ACTIVE (6 agents in parallel)
+    → Port Scan + Web Recon + SSL/TLS + Dir/File + Cloud Assets + JS Analysis
     → AI summarizes → Approval Gate #2 → PAUSE
 
 User approves → Re-plan (Haiku analyzes, adjusts agent plan)
-  → Phase 3: VULN → Report Generation (Sonnet) → DONE
+  → Phase 3: VULN (2 agents)
+    → Nuclei (tech-based template selection) + Subdomain Takeover
+    → Report Generation (Sonnet executive summary) → DONE
 ```
 
 ## Security
@@ -149,7 +155,7 @@ User approves → Re-plan (Haiku analyzes, adjusts agent plan)
 recon-sentinel-repo/
 ├── backend/
 │   ├── app/
-│   │   ├── agents/        # 9 agents + base class + self-correction engine
+│   │   ├── agents/        # 13 agents + base class + self-correction engine
 │   │   ├── api/           # 15 route modules (88 endpoints) + WebSocket
 │   │   ├── core/          # config, database, auth, redis, celery, llm, middleware
 │   │   ├── models/        # 29 SQLAlchemy models + 18 enums
@@ -183,8 +189,7 @@ Monthly budget cap configurable via `LLM_MONTHLY_BUDGET_USD` (default $50).
 
 ## Not Yet Implemented
 
-- Nuclei vulnerability agent (Phase 3 placeholder)
-- WAF detection agent, cloud asset agent, JS analysis agent, historical data agent
+- WAF detection agent, historical data agent
 - Row-level security (RLS) policies
 - Plugin sandbox system
 - iptables-level scope enforcement (host-side network policy)
