@@ -136,27 +136,42 @@ class ScanOrchestrator:
                 if self.state.profile == "passive_only":
                     self.state.current_phase = "report"
                     logger.info("passive_only profile — skipping active/vuln phases, generating report")
+                elif self.state.profile == "bounty":
+                    # Bounty: fire-and-forget — skip all gates, run everything automatically
+                    self.state.current_phase = "active"
+                    logger.info("bounty profile — auto-approving gates, full speed ahead")
                 else:
                     self.state.current_phase = "gate_1"
 
             elif current == "gate_1":
-                await self._generate_gate(1)
-                await self._save_checkpoint()
-                return self.state  # PAUSE for human
+                if self.state.profile == "bounty":
+                    # Auto-approve gate 1 for bounty profile
+                    self.state.gate_1_decision = "approved"
+                    self.state.current_phase = "active"
+                    logger.info("bounty profile — gate 1 auto-approved")
+                else:
+                    await self._generate_gate(1)
+                    await self._save_checkpoint()
+                    return self.state  # PAUSE for human
 
             elif current == "active":
                 await self._run_active()
                 # Profile branching: quick skips gate 2 and goes straight to vuln
-                if self.state.profile == "quick":
+                if self.state.profile in ("quick", "bounty"):
                     self.state.current_phase = "vuln"
-                    logger.info("quick profile — skipping gate 2, proceeding to vuln")
+                    logger.info(f"{self.state.profile} profile — skipping gate 2, proceeding to vuln")
                 else:
                     self.state.current_phase = "gate_2"
 
             elif current == "gate_2":
-                await self._generate_gate(2)
-                await self._save_checkpoint()
-                return self.state  # PAUSE for human
+                if self.state.profile == "bounty":
+                    self.state.gate_2_decision = "approved"
+                    self.state.current_phase = "replan"
+                    logger.info("bounty profile — gate 2 auto-approved")
+                else:
+                    await self._generate_gate(2)
+                    await self._save_checkpoint()
+                    return self.state  # PAUSE for human
 
             elif current == "replan":
                 await self._run_replan()

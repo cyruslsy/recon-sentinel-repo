@@ -310,8 +310,13 @@ async def _send_telegram(config: dict, event_type: str, payload: dict, http_clie
 
     message = f"*🛡️ {_event_title(event_type)}*\n\n{_format_message(event_type, payload)}"
 
-    resp = await http_client.post(
-        f"https://api.telegram.org/bot{bot_token}/sendMessage",
+    # R11 P2 FIX: Validate Telegram URL via _is_safe_url for consistency with SSRF pattern
+    tg_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    safe, reason, resolved_ip = _is_safe_url(tg_url)
+    if not safe:
+        return False, f"SSRF blocked: {reason}"
+
+    resp = await _pinned_request(http_client, "POST", tg_url, resolved_ip,
         json={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"},
     )
     if resp.status_code == 200:

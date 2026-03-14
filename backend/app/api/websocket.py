@@ -89,7 +89,43 @@ async def scan_websocket(websocket: WebSocket, scan_id: str, token: str | None =
         return
 
     await manager.connect(websocket, scan_id)
-    
+
+    # R11 P1 FIX: Redis subscriber task pushes agent events to this WebSocket client.
+    # Without this, agent events published by Celery workers never reach the frontend
+    # because the ConnectionManager is per-process (in-memory dict).
+    import asyncio
+    import redis.asyncio as aioredis
+
+    async def _redis_subscriber():
+        """Subscribe to Redis pub/sub for this scan and forward events to the WebSocket."""
+        try:
+            from app.core.config import get_settings
+            _s = get_settings()
+            sub_client = aioredis.from_url(_s.REDIS_URL, decode_responses=True)
+            pubsub = sub_client.pubsub()
+            await pubsub.subscribe(f"scan:{scan_id}")
+            async for message in pubsub.listen():
+                if message["type"] == "message":
+                    try:
+                        import json
+                        event_data = json.loads(message["data"])
+                        await websocket.send_json(event_data)
+                    except Exception:
+                        pass  # Client disconnected or bad JSON — handled by outer try
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+        finally:
+            try:
+                await pubsub.unsubscribe(f"scan:{scan_id}")
+                await sub_client.aclose()
+            except Exception:
+                pass
+
+    # Run Redis subscriber alongside the client message listener
+    subscriber_task = asyncio.create_task(_redis_subscriber())
+
     try:
         # Send initial connection confirmation
         await websocket.send_json({
@@ -140,11 +176,10 @@ async def scan_websocket(websocket: WebSocket, scan_id: str, token: str | None =
                 await websocket.send_json({"event": "pong", "data": {}})
     
     except WebSocketDisconnect:
+        subscriber_task.cancel()
         manager.disconnect(websocket, scan_id)
     except Exception as e:
-        # Catch all exceptions (network drops, client crashes, etc.)
-        # Without this, unclean disconnects leave the WebSocket in manager.active
-        # and any Redis subscriptions leak
+        subscriber_task.cancel()
         import logging
         logging.getLogger(__name__).debug(f"WebSocket error for scan {scan_id}: {e}")
         manager.disconnect(websocket, scan_id)

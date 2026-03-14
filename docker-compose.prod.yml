@@ -155,7 +155,8 @@ services:
       - ALL
     cap_add:
       - NET_RAW
-      - SYS_ADMIN    # Required for headless Chromium (GoWitness screenshots)
+      # SYS_ADMIN REMOVED (R9/R11 P1): Container escape vector.
+      # GoWitness/Chromium now uses --no-sandbox flag (container IS the sandbox).
     security_opt:
       - no-new-privileges:true
     read_only: true

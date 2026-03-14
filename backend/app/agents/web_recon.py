@@ -184,6 +184,9 @@ class WebReconAgent(BaseAgent):
                         "--screenshot-path", output_dir,
                         "--disable-logging",
                         "--timeout", "15",
+                        "--chrome-path", "/usr/bin/chromium",
+                        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+                        # --no-sandbox: container IS the sandbox (SYS_ADMIN removed from Docker caps)
                     ],
                     timeout=30,
                 )

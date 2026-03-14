@@ -474,7 +474,7 @@ class VulnAgent(BaseAgent):
 
 # ─── Celery Task ──────────────────────────────────────────────
 
-@celery_app.task(name="app.agents.vuln.run_vuln_agent")
+@celery_app.task(name="app.agents.vuln.run_vuln_agent", soft_time_limit=5400, time_limit=5700)
 def run_vuln_agent(scan_id: str, target_value: str, project_id: str, config: dict | None = None):
     import asyncio
     agent = VulnAgent(scan_id, target_value, project_id, config)

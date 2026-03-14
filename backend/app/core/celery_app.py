@@ -60,10 +60,10 @@ celery_app.conf.update(
     task_track_started=True,             # Track running state
 
     # Task time limits — prevents permanently consumed worker slots
-    # soft_time_limit sends SoftTimeLimitExceeded (agent can cleanup)
-    # task_time_limit force-kills the task (last resort)
-    task_soft_time_limit=1800,           # 30 min soft limit (agents can catch and cleanup)
-    task_time_limit=2100,                # 35 min hard kill (5 min grace after soft)
+    # Default: 45min soft / 50min hard (covers most agents)
+    # Vuln agents override this with task-level time_limit=5400 (90min)
+    task_soft_time_limit=2700,           # 45 min soft limit (agents can catch and cleanup)
+    task_time_limit=3000,                # 50 min hard kill (5 min grace after soft)
 
     # Worker memory protection — restart worker after processing N tasks
     # Prevents slow memory leaks from accumulating over days
