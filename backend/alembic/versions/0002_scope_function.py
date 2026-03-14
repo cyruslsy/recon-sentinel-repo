@@ -13,6 +13,46 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Create helper function first (is_in_scope depends on it)
+    op.execute("""
+    CREATE OR REPLACE FUNCTION _scope_match(
+        p_item_type VARCHAR, p_item_value VARCHAR, p_target VARCHAR
+    )
+    RETURNS BOOLEAN
+    LANGUAGE plpgsql
+    IMMUTABLE
+    AS $$
+    BEGIN
+        CASE p_item_type
+            WHEN 'domain' THEN
+                -- Wildcard: *.example.com matches sub.example.com and example.com
+                IF p_item_value LIKE '*.%' THEN
+                    RETURN p_target = substring(p_item_value FROM 3)
+                        OR p_target LIKE '%.' || substring(p_item_value FROM 3);
+                ELSE
+                    RETURN p_target = p_item_value;
+                END IF;
+            WHEN 'ip' THEN
+                RETURN p_target = p_item_value;
+            WHEN 'cidr' THEN
+                BEGIN
+                    RETURN inet(p_target) <<= inet(p_item_value);
+                EXCEPTION WHEN OTHERS THEN
+                    RETURN FALSE;
+                END;
+            WHEN 'regex' THEN
+                BEGIN
+                    RETURN p_target ~ p_item_value;
+                EXCEPTION WHEN OTHERS THEN
+                    RETURN FALSE;
+                END;
+            ELSE
+                RETURN FALSE;
+        END CASE;
+    END;
+    $$;
+    """)
+
     op.execute("""
     CREATE OR REPLACE FUNCTION is_in_scope(p_project_id UUID, p_target_value VARCHAR)
     RETURNS BOOLEAN
@@ -48,44 +88,6 @@ def upgrade() -> None:
 
         -- No match = out of scope
         RETURN FALSE;
-    END;
-    $$;
-
-    -- Helper: match a single scope rule against a target
-    CREATE OR REPLACE FUNCTION _scope_match(
-        p_item_type VARCHAR, p_item_value VARCHAR, p_target VARCHAR
-    )
-    RETURNS BOOLEAN
-    LANGUAGE plpgsql
-    IMMUTABLE
-    AS $$
-    BEGIN
-        CASE p_item_type
-            WHEN 'domain' THEN
-                -- Wildcard: *.example.com matches sub.example.com and example.com
-                IF p_item_value LIKE '*.%' THEN
-                    RETURN p_target = substring(p_item_value FROM 3)
-                        OR p_target LIKE '%.' || substring(p_item_value FROM 3);
-                ELSE
-                    RETURN p_target = p_item_value;
-                END IF;
-            WHEN 'ip' THEN
-                RETURN p_target = p_item_value;
-            WHEN 'cidr' THEN
-                BEGIN
-                    RETURN inet(p_target) <<= inet(p_item_value);
-                EXCEPTION WHEN OTHERS THEN
-                    RETURN FALSE;
-                END;
-            WHEN 'regex' THEN
-                BEGIN
-                    RETURN p_target ~ p_item_value;
-                EXCEPTION WHEN OTHERS THEN
-                    RETURN FALSE;
-                END;
-            ELSE
-                RETURN FALSE;
-        END CASE;
     END;
     $$;
     """)

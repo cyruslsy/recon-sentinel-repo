@@ -62,7 +62,11 @@ services:
     command: >
       sh -c "
         while ! pg_isready -h postgres -U sentinel -d recon_sentinel; do sleep 1; done &&
-        cd /app && alembic upgrade head
+        echo 'Applying base schema...' &&
+        PGPASSWORD=$$(cat /run/secrets/db_password) psql -h postgres -U sentinel -d recon_sentinel -f /schema/schema-v1.2.sql 2>&1 | tail -5 &&
+        echo 'Stamping alembic to latest migration...' &&
+        cd /app && alembic stamp head &&
+        echo 'Database initialized successfully.'
       "
     environment:
       DATABASE_URL: postgresql+asyncpg://sentinel:@postgres:5432/recon_sentinel
@@ -70,6 +74,8 @@ services:
       PYTHONPATH: /app
     secrets:
       - db_password
+    volumes:
+      - ./database:/schema:ro
     depends_on:
       postgres:
         condition: service_healthy
