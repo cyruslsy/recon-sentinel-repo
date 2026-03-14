@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo , Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
@@ -101,28 +101,28 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
       </div>
 
       {/* Health note (self-correction status) */}
-      {status === "self_correcting" && (
+      {status === "self_correcting" ? (
         <div className="mt-2 text-[11px] bg-sentinel-orange/5 border border-sentinel-orange/20 rounded px-2 py-1 text-sentinel-orange">
           ⟳ Self-correcting: detecting anomaly pattern and adjusting parameters...
         </div>
-      )}
+      ) : null}
 
-      {data.last_log_line && (
+      {data.last_log_line ? (
         <p className="text-[11px] text-sentinel-muted mt-2 font-mono truncate">
           {String(data.last_log_line)}
         </p>
-      )}
+      ) : null}
 
       {/* Expanded section: full log + actions */}
       {expanded && (
         <div className="mt-3 space-y-2" onClick={e => e.stopPropagation()}>
           {/* Last command */}
-          {data.last_log_line && (
+          {data.last_log_line ? (
             <div className="p-2 bg-sentinel-bg rounded border border-sentinel-border">
               <p className="text-[10px] text-sentinel-muted mb-1">LAST COMMAND</p>
               <p className="text-xs font-mono text-sentinel-text/80 break-all">{String(data.last_log_line)}</p>
             </div>
-          )}
+          ) : null}
 
           {/* Action buttons */}
           <div className="flex gap-2 pt-1">
@@ -180,11 +180,11 @@ function GateBanner({ gate, scanId, onDecided }: { gate: ApprovalGate; scanId: s
           </h3>
           <p className="text-sm mt-2">{gate.ai_summary}</p>
 
-          {gate.ai_recommendation?.risk_assessment && (
+          {gate.ai_recommendation?.risk_assessment ? (
             <p className="text-xs text-sentinel-muted mt-2">
-              Risk: {gate.ai_recommendation.risk_assessment}
+              Risk: {String(gate.ai_recommendation.risk_assessment)}
             </p>
-          )}
+          ) : null}
 
           {/* Customization panel */}
           {showCustomize && (
@@ -248,7 +248,7 @@ function GateBanner({ gate, scanId, onDecided }: { gate: ApprovalGate; scanId: s
   );
 }
 
-export default function AgentsPage() {
+function AgentsPageInner() {
   const searchParams = useSearchParams();
   const scanId = searchParams?.get("scan_id") || null;
   const [agents, setAgents] = useState<AgentRun[]>([]);
@@ -261,7 +261,7 @@ export default function AgentsPage() {
   const wsAgentMap = useMemo(() => {
     const map = new Map<string, any>();
     agentUpdates.forEach((e) => {
-      if (e.data?.agent_run_id) map.set(e.data.agent_run_id, e.data);
+      if (e.data?.agent_run_id) map.set(String(e.data.agent_run_id), e.data);
     });
     return map;
   }, [agentUpdates]);
@@ -368,4 +368,8 @@ export default function AgentsPage() {
       </div>
     </AppLayout>
   );
+}
+
+export default function AgentsPage() {
+  return (<Suspense fallback={<div className="p-8 text-center text-sentinel-muted">Loading...</div>}><AgentsPageInner /></Suspense>);
 }

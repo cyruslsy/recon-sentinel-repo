@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState , Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
@@ -38,7 +38,7 @@ const CHANGE_STYLES = {
   changed: { bg: "bg-yellow-500/10 border-yellow-500/30", text: "text-yellow-400", label: "CHANGED" },
 };
 
-export default function HistoryPage() {
+function HistoryPageInner() {
   const searchParams = useSearchParams();
   const scanId = searchParams?.get("scan_id") || "";
   const [scans, setScans] = useState<Scan[]>([]);
@@ -261,4 +261,8 @@ export default function HistoryPage() {
       </div>
     </AppLayout>
   );
+}
+
+export default function HistoryPage() {
+  return (<Suspense fallback={<div className="p-8 text-center text-sentinel-muted">Loading...</div>}><HistoryPageInner /></Suspense>);
 }

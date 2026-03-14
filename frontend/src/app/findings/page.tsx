@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback , Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
-import type { Finding, FindingSeverity } from "@/lib/types";
+import type { Finding, FindingSeverity, VerificationStatus } from "@/lib/types";
 
 const SEVERITY_BADGE: Record<string, string> = {
   critical: "bg-red-500/20 text-red-400",
@@ -85,7 +85,7 @@ function FindingDetail({
     try {
       await api.updateFinding(finding.id, {
         verification_status: triage.verification_status,
-        severity_override: triage.severity_override || null,
+        severity_override: (triage.severity_override || null) as any,
         severity_override_reason: triage.severity_override_reason || null,
       });
       onUpdate();
@@ -194,7 +194,7 @@ function FindingDetail({
                 <label className="text-xs text-sentinel-muted block mb-1">Verification Status</label>
                 <select
                   value={triage.verification_status}
-                  onChange={(e) => setTriage((t) => ({ ...t, verification_status: e.target.value }))}
+                  onChange={(e) => setTriage((t) => ({ ...t, verification_status: e.target.value as VerificationStatus }))}
                   className="w-full bg-sentinel-bg border border-sentinel-border rounded px-3 py-1.5 text-sm"
                 >
                   <option value="unverified">Unverified</option>
@@ -267,7 +267,7 @@ function FindingDetail({
 
 // ─── Main Page ───────────────────────────────────────────────────────
 
-export default function FindingsPage() {
+function FindingsPageInner() {
   const searchParams = useSearchParams();
   const scanId = searchParams?.get("scan_id") || "";
   const [findings, setFindings] = useState<Finding[]>([]);
@@ -585,4 +585,8 @@ export default function FindingsPage() {
       )}
     </AppLayout>
   );
+}
+
+export default function FindingsPage() {
+  return (<Suspense fallback={<div className="p-8 text-center text-sentinel-muted">Loading...</div>}><FindingsPageInner /></Suspense>);
 }

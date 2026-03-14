@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState , Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
@@ -42,7 +42,7 @@ function groupByTactic(techniques: (MitreHeatmapItem & { name?: string; tactic?:
   return groups;
 }
 
-export default function MitrePage() {
+function MitrePageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const scanId = searchParams?.get("scan_id") || "";
@@ -229,4 +229,8 @@ export default function MitrePage() {
       </div>
     </AppLayout>
   );
+}
+
+export default function MitrePage() {
+  return (<Suspense fallback={<div className="p-8 text-center text-sentinel-muted">Loading...</div>}><MitrePageInner /></Suspense>);
 }

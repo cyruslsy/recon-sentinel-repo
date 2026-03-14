@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState , Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
 import type { CredentialLeak, CredentialSummary } from "@/lib/types";
 
-export default function CredentialsPage() {
+function CredentialsPageInner() {
   const searchParams = useSearchParams();
   const scanId = searchParams?.get("scan_id") || "";
   const [creds, setCreds] = useState<CredentialLeak[]>([]);
@@ -103,4 +103,8 @@ export default function CredentialsPage() {
       </div>
     </AppLayout>
   );
+}
+
+export default function CredentialsPage() {
+  return (<Suspense fallback={<div className="p-8 text-center text-sentinel-muted">Loading...</div>}><CredentialsPageInner /></Suspense>);
 }

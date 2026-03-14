@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback , Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
@@ -24,7 +24,7 @@ const EVENT_ICONS: Record<string, { icon: string; color: string; bg: string; lab
   escalate_user:      { icon: "!", color: "text-sentinel-red", bg: "bg-sentinel-red/10", label: "Action needed" },
 };
 
-export default function HealthFeedPage() {
+function HealthFeedPageInner() {
   const [events, setEvents] = useState<HealthEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterTab>("all");
@@ -73,7 +73,7 @@ export default function HealthFeedPage() {
   const { lastEvent } = useWebSocket(scanId);
   useEffect(() => {
     if (lastEvent?.event === "agent.health") {
-      setEvents(prev => [lastEvent.data as HealthEvent, ...prev]);
+      setEvents(prev => [lastEvent.data as unknown as HealthEvent, ...prev]);
     }
   }, [lastEvent]);
 
@@ -349,4 +349,8 @@ function ActionButton({ label, variant, eventId, decision, onDecided }: {
       {loading ? "..." : label}
     </button>
   );
+}
+
+export default function HealthFeedPage() {
+  return (<Suspense fallback={<div className="p-8 text-center text-sentinel-muted">Loading...</div>}><HealthFeedPageInner /></Suspense>);
 }

@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState , Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
 import { api } from "@/lib/api";
 import type { ChatMessage, ChatSession } from "@/lib/types";
 
-export default function ChatPage() {
+function ChatPageInner() {
   const searchParams = useSearchParams();
   const scanId = searchParams?.get("scan_id") || "";
   const [sessionId, setSessionId] = useState("");
@@ -20,7 +20,7 @@ export default function ChatPage() {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
   useEffect(() => {
     if (scanId) {
-      api.getScan(scanId).then((s: { target_value?: string }) => {
+      api.getScan(scanId).then((s: any) => {
         if (s.target_value) setTargetName(s.target_value);
       }).catch(() => {});
     }
@@ -49,13 +49,13 @@ export default function ChatPage() {
     setSending(true);
 
     // Optimistic: show user message immediately
-    setMessages((prev) => [...prev, { role: "user", content, id: `temp-${Date.now()}` }]);
+    setMessages((prev) => [...prev, { role: "user", content, id: `temp-${Date.now()}`, slash_command: null, model_used: null, cost_usd: null, latency_ms: null, created_at: new Date().toISOString() } as ChatMessage]);
 
     try {
       const aiMsg = await api.sendChatMessage(sessionId, content);
       setMessages((prev) => [...prev, aiMsg]);
     } catch {
-      setMessages((prev) => [...prev, { role: "ai", content: "Failed to get response. Try again.", id: `err-${Date.now()}` }]);
+      setMessages((prev) => [...prev, { role: "ai", content: "Failed to get response. Try again.", id: `err-${Date.now()}`, slash_command: null, model_used: null, cost_usd: null, latency_ms: null, created_at: new Date().toISOString() } as ChatMessage]);
     }
     setSending(false);
   }
@@ -144,4 +144,8 @@ export default function ChatPage() {
       </div>
     </AppLayout>
   );
+}
+
+export default function ChatPage() {
+  return (<Suspense fallback={<div className="p-8 text-center text-sentinel-muted">Loading...</div>}><ChatPageInner /></Suspense>);
 }
