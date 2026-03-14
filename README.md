@@ -15,14 +15,14 @@
   <img src="https://img.shields.io/badge/tests-91-green" />
   <img src="https://img.shields.io/badge/agents-17-orange" />
   <img src="https://img.shields.io/badge/MITRE_ATT&CK-15_techniques-purple" />
-  <img src="https://img.shields.io/badge/review_rounds-8_passed-brightgreen" />
+  <img src="https://img.shields.io/badge/review_rounds-11_passed-brightgreen" />
 </p>
 
 ---
 
 ## Overview
 
-Recon Sentinel is an intelligent reconnaissance platform for penetration testers, red teams, and security consultants. It orchestrates 13 specialized scanning agents across a 3-phase pipeline with AI-powered approval gates, self-correcting anomaly detection, and automated MITRE ATT&CK mapping.
+Recon Sentinel is an intelligent reconnaissance platform for penetration testers, red teams, and security consultants. It orchestrates 17 specialized scanning agents across a 3-phase pipeline with AI-powered approval gates, self-correcting anomaly detection, and automated MITRE ATT&CK mapping.
 
 **Key differentiators over existing tools (reNgine, BBOT, reconFTW):**
 
@@ -70,14 +70,14 @@ Recon Sentinel is an intelligent reconnaissance platform for penetration testers
                     └────────┬────────┘
                              │
                     ┌────────▼────────┐
-                    │  FastAPI API     │  88 endpoints + WebSocket
+                    │  FastAPI API     │  93 endpoints + WebSocket
                     │  JWT + RBAC +    │  Multi-tenant authorization
                     │  Audit Middleware │  Scope enforcement
                     └──┬──────────┬───┘
                        │          │
               ┌────────▼──┐  ┌───▼──────────┐
               │ PostgreSQL │  │    Redis      │
-              │ 29 tables  │  │ Token blacklist│
+              │ 32 tables  │  │ Token blacklist│
               │ JSONB state│  │ Rate limiting  │
               │ is_in_scope│  │ Pub/sub events │
               └────────────┘  └───────────────┘
@@ -87,7 +87,7 @@ Recon Sentinel is an intelligent reconnaissance platform for penetration testers
               │                                                    │
               │  ┌─────────┐  ┌──────────┐  ┌─────────────────┐  │
               │  │ Passive  │  │  Active   │  │  Vulnerability  │  │
-              │  │ 5 agents │→ │ 6 agents  │→ │  2 agents       │  │
+              │  │ 6 agents │→ │ 8 agents  │→ │  3 agents       │  │
               │  │          │  │  × N subs │  │                 │  │
               │  └─────────┘  └──────────┘  └─────────────────┘  │
               │       │            │               │              │
@@ -117,34 +117,38 @@ Recon Sentinel is an intelligent reconnaissance platform for penetration testers
 ```
 POST /scans → Orchestrator creates ReconState → checkpoint saved
 
-Phase 1: PASSIVE (5 agents, no target interaction)
+Phase 1: PASSIVE (6 agents, no target interaction)
   ├── Subdomain Discovery (Subfinder + crt.sh)
   ├── OSINT (theHarvester)
   ├── Email Security (SPF/DKIM/DMARC)
   ├── Threat Intelligence (Shodan + VirusTotal)
-  └── Credential Leak (HIBP API)
+  ├── Credential Leak (HIBP API)
+  └── GitHub Dorking (GitHub Search API)
   → _collect_discovered_targets() → extracts N live subdomains
   → Sonnet generates findings summary → Approval Gate #1 → PAUSE
   → Notification: "Gate ready" → Slack/Discord/Telegram
 
 User approves → POST /scans/{id}/gates/1/decide
 
-Phase 2: ACTIVE (6 agent types × N subdomains, fan-out)
+Phase 2: ACTIVE (8 agent types × N subdomains, fan-out)
   Per-subdomain (chunked, 20 concurrent):
   ├── Port & Service Scan (Naabu + Nmap)
   ├── Web Reconnaissance (httpx + GoWitness)
   ├── SSL/TLS Analysis (OpenSSL)
   ├── Dir/File Discovery (ffuf + self-correction)
-  └── JavaScript Analysis (secret scanning + endpoint extraction)
+  ├── JavaScript Analysis (secret scanning + endpoint extraction)
+  ├── WAF Detection (signature analysis)
+  └── Wayback URLs (historical endpoint discovery)
   Domain-level (once):
   └── Cloud Asset Discovery (S3/Azure/GCP + CNAME fingerprinting)
   → Sonnet summary → Approval Gate #2 → PAUSE
 
 User approves → Re-plan node (Haiku adjusts agent plan, max 3 iterations, $0.50 cap)
 
-Phase 3: VULNERABILITY (2 agents)
-  ├── Nuclei Scanner (tech-based template selection)
-  └── Subdomain Takeover (20 service fingerprints)
+Phase 3: VULNERABILITY (3 agents)
+  ├── Nuclei Scanner (KEV priority + auto tech detection + DAST fuzzing)
+  ├── Subdomain Takeover (21 service fingerprints)
+  └── Bad Secrets (known MachineKeys, Telerik, Flask, Rails, JWT secrets)
   → Report Generation (Sonnet executive summary)
   → Auto-diff against previous scan
   → Notification: "Scan complete — 42 findings, 3 critical"
@@ -162,15 +166,18 @@ Phase 3: VULNERABILITY (2 agents)
 | 3 | Email Security | Passive | DNS queries | T1566 | — |
 | 4 | Threat Intelligence | Passive | Shodan, VirusTotal | T1590 | Rate limiting (1 req/s) |
 | 5 | Credential Leak | Passive | HIBP API | T1078 | Rate limiting (1.6s/req) |
-| 6 | Port & Service Scan | Active | Naabu, Nmap | T1595 | Firewall → Connect scan fallback |
-| 7 | Web Reconnaissance | Active | httpx, GoWitness | T1592 | — |
-| 8 | SSL/TLS Analysis | Active | OpenSSL | T1190 | — |
-| 9 | Dir/File Discovery | Active | ffuf | T1190, T1078 | Custom 404, WAF, rate limit, redirect loop |
-| 10 | Cloud Asset Discovery | Active | DNS CNAME, HTTP | T1580, T1530 | — |
-| 11 | JavaScript Analysis | Active | httpx, regex | T1552, T1190 | — |
-| 12 | Vulnerability Scanner | Vuln | Nuclei | T1190 | Info flood → severity filter; WAF-aware rate adaptation; KEV priority scan |
-| 13 | Subdomain Takeover | Vuln | DNS, HTTP | T1584 | Truncation warning at 100+ hosts |
-| 14 | Bad Secrets | Vuln | badsecrets, httpx | T1078, T1190 | Known MachineKeys, Telerik keys, Flask/Rails/JWT weak secrets |
+| 6 | GitHub Dorking | Passive | GitHub API | T1552 | — |
+| 7 | Port & Service Scan | Active | Naabu, Nmap | T1595 | Firewall → Connect scan fallback |
+| 8 | Web Reconnaissance | Active | httpx, GoWitness | T1592 | — |
+| 9 | SSL/TLS Analysis | Active | OpenSSL | T1190 | — |
+| 10 | Dir/File Discovery | Active | ffuf | T1190, T1078 | Custom 404, WAF, rate limit, redirect loop |
+| 11 | Cloud Asset Discovery | Active | DNS CNAME, HTTP | T1580, T1530 | — |
+| 12 | JavaScript Analysis | Active | httpx, regex | T1552, T1190 | — |
+| 13 | WAF Detection | Active | httpx | T1595 | — |
+| 14 | Wayback URLs | Active | Wayback Machine API | T1593 | — |
+| 15 | Vulnerability Scanner | Vuln | Nuclei | T1190 | Info flood → severity filter; WAF-aware rate adaptation; KEV priority scan |
+| 16 | Subdomain Takeover | Vuln | DNS, HTTP | T1584 | Truncation warning at 100+ hosts |
+| 17 | Bad Secrets | Vuln | badsecrets, httpx | T1078, T1190 | Known MachineKeys, Telerik keys, Flask/Rails/JWT weak secrets |
 
 ---
 
@@ -331,8 +338,8 @@ recon-sentinel-repo/
 │       │   └── models.py             29 SQLAlchemy 2.0 models
 │       ├── schemas/
 │       │   └── schemas.py            47 Pydantic v2 schemas
-│       ├── api/                      15 route modules, 88+ endpoints
-│       ├── agents/                   13 agents + base + corrections + DNS utils
+│       ├── api/                      15 route modules, 93 endpoints
+│       ├── agents/                   17 agents + base + corrections + DNS utils
 │       └── tasks/
 │           ├── orchestrator.py       LangGraph state machine + fan-out
 │           ├── reports.py            LLM-powered report generation
@@ -346,7 +353,7 @@ recon-sentinel-repo/
 │       ├── components/               Sidebar, AppLayout, ErrorBoundary
 │       ├── hooks/                    WebSocket hook
 │       └── lib/                      Typed API client, auth context, types.ts
-├── tests/                            78 tests across 11 suites
+├── tests/                            91 tests across 12 suites
 ├── docs/                             Architecture docs, competitive analysis
 │   └── assets/                       SVG diagrams
 ├── nginx/                            Dev + production configs
@@ -381,40 +388,33 @@ recon-sentinel-repo/
 ## Roadmap
 
 **Implemented:**
-- [x] 13 scanning agents with per-subdomain fan-out
+- [x] 17 scanning agents with per-subdomain fan-out across 3 phases
 - [x] LangGraph orchestrator with checkpoint persistence
 - [x] Human-in-the-loop approval gates with AI summaries
-- [x] Self-correcting anomaly detection (5 patterns)
+- [x] Self-correcting anomaly detection (11 patterns)
 - [x] Multi-tenant authorization (org → project → target → scan)
-- [x] Scan diff + continuous monitoring + AI change summaries
-- [x] Real-time notifications (Slack/Discord/Telegram/webhook)
-- [x] Resume-from-checkpoint for crashed/paused scans
-- [x] SSRF protection on notification webhooks
 - [x] Row-level security (RLS) on 5 tables with middleware auto-context
-- [x] DNS rebinding protection in SSRF validation
-- [x] HackerOne + Bugcrowd scope import (GraphQL + REST)
-- [x] Email notifications via aiosmtplib (SMTP/TLS)
-- [x] Real LLM streaming via WebSocket (litellm stream=True)
-- [x] API key encryption at rest (Fernet)
-- [x] SMTP password encryption in notification config
-- [x] Celery task revocation on scan stop
-- [x] Agent resume + rerun endpoints
-- [x] Target context enrichment (DNS/MX/NS)
-- [x] Celery Flower monitoring dashboard
-- [x] Global scan timeout (6h) + findings cap (10K)
-- [x] Process group management for subprocess cleanup
-- [x] WAF evasion utilities (UA rotation, jitter, stealth headers)
-- [x] Zero TODOs — all feature stubs implemented
-- [x] 78 tests including agent integration + E2E tests
+- [x] Scan diff + continuous monitoring + AI change summaries
+- [x] Real-time notifications (Slack/Discord/Telegram/webhook/email)
+- [x] WAF detection agent + Wayback URL agent + GitHub dorking agent
+- [x] Bad Secrets agent (8 framework known-secret detection)
+- [x] PDF/HTML report rendering with AI executive summaries
+- [x] CSV export, single-finding retest, finding triage workflow
+- [x] Scan profiles (full, passive_only, quick, stealth, bounty)
+- [x] KEV priority scanning + DAST fuzzing + WAF-aware rate adaptation
+- [x] Tiered wordlist system (profile-sized + tech-adaptive)
+- [x] SSRF protection with DNS rebinding prevention
+- [x] Login rate limiting, global exception handler, health check
+- [x] 91 tests across 12 suites, 11 adversarial review rounds
 
-**Planned:**
-- [ ] WAF detection agent
-- [ ] Historical data agent (Wayback Machine)
-- [x] Row-level security (RLS) — 5 tables, middleware-wired
-- [ ] Plugin sandbox system
-- [ ] iptables-level scope enforcement
-- [ ] PDF/DOCX report export
-- [ ] CLI export mode (`recon-sentinel scan --target example.com`)
+**Planned (v1.1):**
+- [ ] Cross-tenant isolation tests + PostgreSQL test fixtures
+- [ ] SOCKS5/HTTP proxy routing for scan traffic (OPSEC)
+- [ ] Scope attestation (Rules of Engagement upload)
+- [ ] Subscan endpoint (target individual subdomains)
+- [ ] Data retention policy + Prometheus/Grafana monitoring
+- [ ] CLI mode (`recon-sentinel scan --target example.com`)
+- [ ] Frontend DOMPurify for tool output sanitization
 
 ---
 

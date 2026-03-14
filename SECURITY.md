@@ -6,7 +6,7 @@
 
 If you discover a security vulnerability in Recon Sentinel, please report it responsibly:
 
-1. **Email:** security@reconsentinel.com
+1. **Email:** cyruslsyx@gmail.com
 2. **Subject:** `[SECURITY] Brief description`
 3. **Include:**
    - Description of the vulnerability
@@ -58,5 +58,6 @@ Recon Sentinel implements defense-in-depth:
 
 | Version | Supported |
 |---------|-----------|
-| 0.9.x   | ✅ Active  |
+| 1.0.x   | ✅ Active  |
+| 0.9.x   | ⚠️ Security fixes only |
 | < 0.9   | ❌ No      |
