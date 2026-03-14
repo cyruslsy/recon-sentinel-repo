@@ -30,8 +30,9 @@ from app.models.enums import (
     ScopeStatus, UserRole,
 )
 
-# Type alias for cleaner column definitions
-UUID_PK = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+# Factory function — each call returns a NEW mapped_column (SQLAlchemy objects can't be shared across tables)
+def UUID_PK():
+    return mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -41,7 +42,7 @@ UUID_PK = mapped_column(PgUUID(as_uuid=True), primary_key=True, default=uuid.uui
 class User(Base, TimestampMixin):
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -68,7 +69,7 @@ class User(Base, TimestampMixin):
 class Organization(Base, TimestampMixin):
     __tablename__ = "organizations"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -80,7 +81,7 @@ class Organization(Base, TimestampMixin):
 class Project(Base, TimestampMixin):
     __tablename__ = "projects"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     org_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
@@ -99,7 +100,7 @@ class Project(Base, TimestampMixin):
 class ProjectMember(Base):
     __tablename__ = "project_members"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role", create_type=False), default=UserRole.TESTER)
@@ -118,7 +119,7 @@ class ProjectMember(Base):
 class Target(Base, TimestampMixin):
     __tablename__ = "targets"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     target_value: Mapped[str] = mapped_column(String(500), nullable=False)
     input_type: Mapped[InputType] = mapped_column(Enum(InputType, name="input_type", create_type=False), nullable=False)
@@ -149,7 +150,7 @@ class Target(Base, TimestampMixin):
 class ScopeDefinition(Base):
     __tablename__ = "scope_definitions"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     item_type: Mapped[ScopeItemType] = mapped_column(Enum(ScopeItemType, name="scope_item_type", create_type=False), nullable=False)
     item_value: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -169,7 +170,7 @@ class ScopeDefinition(Base):
 class ScopeViolation(Base):
     __tablename__ = "scope_violations"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     agent_run_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("agent_runs.id", ondelete="SET NULL"))
     agent_type: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -188,7 +189,7 @@ class ScopeViolation(Base):
 class ScanEngine(Base, TimestampMixin):
     __tablename__ = "scan_engines"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
     profile: Mapped[ScanProfile] = mapped_column(Enum(ScanProfile, name="scan_profile", create_type=False), default=ScanProfile.CUSTOM)
@@ -202,7 +203,7 @@ class ScanEngine(Base, TimestampMixin):
 class Scan(Base, TimestampMixin):
     __tablename__ = "scans"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     target_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("targets.id", ondelete="CASCADE"), nullable=False)
     engine_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("scan_engines.id"))
     profile: Mapped[ScanProfile] = mapped_column(Enum(ScanProfile, name="scan_profile", create_type=False), default=ScanProfile.FULL)
@@ -259,7 +260,7 @@ class Scan(Base, TimestampMixin):
 class ApprovalGate(Base):
     __tablename__ = "approval_gates"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     gate_number: Mapped[int] = mapped_column(Integer, nullable=False)
     ai_summary: Mapped[str] = mapped_column(Text, nullable=False)
@@ -290,7 +291,7 @@ class ApprovalGate(Base):
 class AgentRun(Base, TimestampMixin):
     __tablename__ = "agent_runs"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     agent_type: Mapped[str] = mapped_column(String(100), nullable=False)
     agent_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -328,7 +329,7 @@ class AgentRun(Base, TimestampMixin):
 class HealthEvent(Base):
     __tablename__ = "health_events"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     agent_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     event_type: Mapped[HealthEventType] = mapped_column(
@@ -360,7 +361,7 @@ class HealthEvent(Base):
 class Finding(Base, TimestampMixin):
     __tablename__ = "findings"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     agent_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
 
@@ -464,7 +465,7 @@ class MitreFindingCount(Base):
 class Subdomain(Base):
     __tablename__ = "subdomains"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     finding_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("findings.id", ondelete="CASCADE"), nullable=False)
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     subdomain: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -486,7 +487,7 @@ class Subdomain(Base):
 class OpenPort(Base):
     __tablename__ = "open_ports"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     finding_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("findings.id", ondelete="CASCADE"), nullable=False)
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     host: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -507,7 +508,7 @@ class OpenPort(Base):
 class Vulnerability(Base):
     __tablename__ = "vulnerabilities"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     finding_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("findings.id", ondelete="CASCADE"), nullable=False)
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     severity: Mapped[FindingSeverity] = mapped_column(
@@ -535,7 +536,7 @@ class Vulnerability(Base):
 class CredentialLeak(Base):
     __tablename__ = "credential_leaks"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     finding_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("findings.id", ondelete="CASCADE"), nullable=False)
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     email: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -565,7 +566,7 @@ class CredentialLeak(Base):
 class DirectoryDiscovery(Base):
     __tablename__ = "directory_discoveries"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     finding_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("findings.id", ondelete="CASCADE"), nullable=False)
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     host: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -591,7 +592,7 @@ class DirectoryDiscovery(Base):
 class Screenshot(Base):
     __tablename__ = "screenshots"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     finding_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("findings.id", ondelete="SET NULL"))
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     url: Mapped[str] = mapped_column(String(2000), nullable=False)
@@ -613,7 +614,7 @@ class Screenshot(Base):
 class ScanDiff(Base):
     __tablename__ = "scan_diffs"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     prev_scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     new_findings_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -639,7 +640,7 @@ class ScanDiff(Base):
 class ScanDiffItem(Base):
     __tablename__ = "scan_diff_items"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     diff_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scan_diffs.id", ondelete="CASCADE"), nullable=False)
     change_type: Mapped[str] = mapped_column(String(20), nullable=False)
     finding_type: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -665,7 +666,7 @@ class ScanDiffItem(Base):
 class Report(Base):
     __tablename__ = "reports"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     template: Mapped[ReportTemplate] = mapped_column(Enum(ReportTemplate, name="report_template", create_type=False), nullable=False)
     format: Mapped[ReportFormat] = mapped_column(Enum(ReportFormat, name="report_format", create_type=False), nullable=False)
@@ -694,7 +695,7 @@ class Report(Base):
 class NotificationChannelModel(Base, TimestampMixin):
     __tablename__ = "notification_channels"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     channel_type: Mapped[NotificationChannel] = mapped_column(
         Enum(NotificationChannel, name="notification_channel", create_type=False), nullable=False
@@ -713,7 +714,7 @@ class NotificationChannelModel(Base, TimestampMixin):
 class NotificationLog(Base):
     __tablename__ = "notification_log"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("notification_channels.id", ondelete="CASCADE"), nullable=False)
     event_type: Mapped[NotificationEvent] = mapped_column(
         Enum(NotificationEvent, name="notification_event", create_type=False), nullable=False
@@ -740,7 +741,7 @@ class NotificationLog(Base):
 class ChatSession(Base):
     __tablename__ = "chat_sessions"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     scan_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("scans.id", ondelete="SET NULL"))
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     title: Mapped[Optional[str]] = mapped_column(String(255))
@@ -752,7 +753,7 @@ class ChatSession(Base):
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -779,7 +780,7 @@ class ChatMessage(Base):
 class ApiKey(Base, TimestampMixin):
     __tablename__ = "api_keys"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     project_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"))
     service_name: Mapped[str] = mapped_column(String(100), nullable=False)
     api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
@@ -795,7 +796,7 @@ class ApiKey(Base, TimestampMixin):
 class LlmUsageLog(Base):
     __tablename__ = "llm_usage_log"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     scan_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("scans.id", ondelete="SET NULL"))
     task_type: Mapped[str] = mapped_column(String(100), nullable=False)
     model_name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -818,7 +819,7 @@ class LlmUsageLog(Base):
 class Plugin(Base, TimestampMixin):
     __tablename__ = "plugins"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     version: Mapped[str] = mapped_column(String(50), nullable=False)
     author: Mapped[Optional[str]] = mapped_column(String(255))
@@ -843,7 +844,7 @@ class Plugin(Base, TimestampMixin):
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
-    id: Mapped[uuid.UUID] = UUID_PK
+    id: Mapped[uuid.UUID] = UUID_PK()
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     action: Mapped[str] = mapped_column(String(100), nullable=False)
     resource_type: Mapped[str] = mapped_column(String(100), nullable=False)
