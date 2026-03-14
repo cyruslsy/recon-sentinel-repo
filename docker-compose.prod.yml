@@ -58,6 +58,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: sentinel-db-init
+    user: root
     command: >
       sh -c "
         while ! pg_isready -h postgres -U sentinel -d recon_sentinel; do sleep 1; done &&
