@@ -32,7 +32,7 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
     status === "error" ? "text-sentinel-red" :
     "text-sentinel-muted";
 
-  const statusIcon =
+  const statusIcon: string =
     status === "completed" ? "✓ " :
     status === "running" ? "● " :
     status === "self_correcting" ? "⟳ " :
