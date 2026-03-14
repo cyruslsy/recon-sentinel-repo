@@ -29,11 +29,15 @@ export default function CredentialsPage() {
         <h1 className="text-xl font-semibold mb-6">Credential Leaks</h1>
 
         {!scanId ? (
-          <p className="text-sentinel-muted text-sm py-12 text-center">Select a scan to view credential leak data.</p>
+          <div className="flex flex-col items-center justify-center py-16 gap-4">
+            <div className="text-4xl">🔑</div>
+            <p className="text-sentinel-muted text-sm">Select a scan to view credential leak data.</p>
+            <a href="/scans" className="text-xs bg-sentinel-accent text-white px-4 py-2 rounded hover:bg-sentinel-accent/90">Go to Scans</a>
+          </div>
         ) : (
           <>
             {/* Summary Cards */}
-            {summary && (
+            {summary ? (
               <div className="grid grid-cols-4 gap-4 mb-6">
                 <div className="bg-sentinel-card border border-sentinel-border rounded-lg p-4">
                   <p className="text-xs text-sentinel-muted">Total Emails</p>
@@ -52,7 +56,13 @@ export default function CredentialsPage() {
                   <p className="text-2xl font-semibold mt-1 text-sentinel-purple">{summary.password_reuse_count}</p>
                 </div>
               </div>
-            )}
+            ) : loading ? (
+              <div className="grid grid-cols-4 gap-4 mb-6">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="bg-sentinel-card border border-sentinel-border rounded-lg p-4 h-20 animate-pulse" />
+                ))}
+              </div>
+            ) : null}
 
             {/* Credential Table */}
             <div className="bg-sentinel-surface border border-sentinel-border rounded-lg overflow-hidden">

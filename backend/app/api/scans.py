@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/", response_model=list[ScanBrief])
+@router.get("/", response_model=list[ScanResponse])
 async def list_scans(
     target_id: UUID | None = None,
     status: ScanStatus | None = None,
@@ -54,7 +54,25 @@ async def list_scans(
     if not include_archived:
         q = q.where(Scan.is_archived == False)  # noqa: E712
     result = await db.execute(q)
-    return result.scalars().all()
+    scans = result.scalars().all()
+
+    # Resolve target_value for each scan (single query for all target_ids)
+    target_ids = list({s.target_id for s in scans})
+    if target_ids:
+        tgt_result = await db.execute(
+            select(Target.id, Target.target_value).where(Target.id.in_(target_ids))
+        )
+        target_map = {row.id: row.target_value for row in tgt_result.all()}
+    else:
+        target_map = {}
+
+    # Build response dicts with target_value injected
+    results = []
+    for scan in scans:
+        d = {c.name: getattr(scan, c.name) for c in scan.__table__.columns}
+        d["target_value"] = target_map.get(scan.target_id)
+        results.append(d)
+    return results
 
 
 @router.post("/", response_model=ScanResponse, status_code=201)
@@ -82,7 +100,12 @@ async def launch_scan(data: ScanCreate, user: User = Depends(get_current_user), 
 
 @router.get("/{scan_id}", response_model=ScanResponse)
 async def get_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    return await authorize_scan(scan_id, user, db)
+    scan = await authorize_scan(scan_id, user, db)
+    # Resolve target_value — build dict to avoid mutating ORM object
+    tgt = await db.execute(select(Target.target_value).where(Target.id == scan.target_id))
+    d = {c.name: getattr(scan, c.name) for c in scan.__table__.columns}
+    d["target_value"] = tgt.scalar_one_or_none()
+    return d
 
 
 @router.post("/{scan_id}/stop")
@@ -126,7 +149,7 @@ async def pause_scan(scan_id: UUID, user: User = Depends(get_current_user), db: 
 async def resume_scan(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Resume a paused or errored scan from its LangGraph checkpoint."""
     scan = await authorize_scan(scan_id, user, db)
-    if scan.status not in (ScanStatus.PAUSED, ScanStatus.ERROR):
+    if scan.status not in (ScanStatus.PAUSED, ScanStatus.FAILED):
         raise HTTPException(status_code=400, detail=f"Cannot resume scan with status '{scan.status.value}'")
 
     if not scan.langgraph_checkpoint:
@@ -136,7 +159,7 @@ async def resume_scan(scan_id: UUID, user: User = Depends(get_current_user), db:
     from sqlalchemy import update
     result = await db.execute(
         update(Scan)
-        .where(Scan.id == scan_id, Scan.status.in_([ScanStatus.PAUSED, ScanStatus.ERROR]))
+        .where(Scan.id == scan_id, Scan.status.in_([ScanStatus.PAUSED, ScanStatus.FAILED]))
         .values(status=ScanStatus.RUNNING, error_message=None)
     )
     await db.commit()

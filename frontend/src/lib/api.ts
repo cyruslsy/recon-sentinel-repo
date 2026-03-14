@@ -4,7 +4,7 @@
  */
 
 import type {
-  TokenResponse, User, Scan, AgentRun, Finding, ApprovalGate,
+  TokenResponse, User, Scan, ScanBrief, AgentRun, Finding, ApprovalGate,
   Organization, Project, Target, ScopeItem, ScopeViolation,
   Report, ChatSession, ChatMessage, ApiKeyConfig, LlmUsageSummary,
   CredentialLeak, CredentialSummary, MitreHeatmapItem, HealthEvent,
@@ -138,11 +138,17 @@ export const api = {
   bulkAction: (data: { finding_ids: string[]; action: string; value?: string }) =>
     request<{ updated: number }>("/findings/bulk", { method: "POST", body: JSON.stringify(data) }),
 
+  retestFinding: (findingId: string) =>
+    request<{ status: string }>(`/findings/${findingId}/retest`, { method: "POST" }),
+
   // Targets
   listTargets: (projectId: string) => request<Target[]>(`/targets?project_id=${projectId}`),
 
   createTarget: (projectId: string, data: { target_value: string; input_type: string }) =>
     request<Target>(`/targets?project_id=${projectId}`, { method: "POST", body: JSON.stringify(data) }),
+
+  getTargetContext: (targetId: string) =>
+    request<{ resolved_ips: string[]; asn_info: string | null; cdn_detected: string | null; registrar: string | null; previous_scan_count: number }>(`/targets/${targetId}/context`),
 
   // Projects
   listProjects: () => request<Project[]>("/projects"),
@@ -157,6 +163,9 @@ export const api = {
   // MITRE
   mitreHeatmap: (scanId: string) =>
     request<{ techniques: MitreHeatmapItem[] }>(`/mitre/heatmap/${scanId}`),
+
+  listMitreTechniques: () =>
+    request<{ id: string; technique_id?: string; technique_name: string; tactic_names?: string[] }[]>("/mitre/techniques"),
 
   // Scope
   listScope: (projectId: string) => request<ScopeItem[]>(`/scope/${projectId}`),

@@ -1,6 +1,6 @@
 """
 Recon Sentinel — SQLAlchemy ORM Models
-Maps 1:1 to PostgreSQL schema v1.1 (29 tables)
+Maps 1:1 to PostgreSQL schema v1.2 (32 tables)
 
 All models use:
   - UUID primary keys
@@ -307,6 +307,8 @@ class AgentRun(Base, TimestampMixin):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     duration_seconds: Mapped[Optional[int]] = mapped_column(Integer)
     last_log_line: Mapped[Optional[str]] = mapped_column(Text)
+    target_host: Mapped[Optional[str]] = mapped_column(String(500))  # Which subdomain this agent targets (fan-out)
+    celery_task_id: Mapped[Optional[str]] = mapped_column(String(255))  # For task revocation on scan stop
 
     scan: Mapped["Scan"] = relationship(back_populates="agent_runs")
     health_events: Mapped[list["HealthEvent"]] = relationship(back_populates="agent_run", cascade="all, delete-orphan")
@@ -366,7 +368,7 @@ class Finding(Base, TimestampMixin):
         Enum(FindingSeverity, name="finding_severity", create_type=False), nullable=False
     )
     confidence: Mapped[Optional[int]] = mapped_column(Integer)
-    value: Mapped[str] = mapped_column(String(1000), nullable=False)
+    value: Mapped[str] = mapped_column(String(2000), nullable=False)
     detail: Mapped[str] = mapped_column(Text, nullable=False)
 
     # MITRE ATT&CK (first-class)

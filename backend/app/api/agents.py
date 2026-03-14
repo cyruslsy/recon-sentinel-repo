@@ -12,6 +12,7 @@ from app.core.auth import get_current_user
 from app.core.authorization import authorize_scan, authorize_agent_run, authorize_health_event
 from app.core.celery_app import celery_app
 from app.models.models import User, AgentRun, HealthEvent
+from app.models.enums import AgentStatus
 from app.schemas.schemas import AgentRunResponse, AgentRunBrief, HealthEventResponse, HealthEventDecision
 
 import logging
@@ -40,7 +41,7 @@ async def get_agent_run(agent_run_id: UUID, user: User = Depends(get_current_use
 async def pause_agent(agent_run_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """Pause a running agent. Sends SIGUSR1 to the Celery task."""
     agent = await authorize_agent_run(agent_run_id, user, db)
-    agent.status = "paused"
+    agent.status = AgentStatus.PAUSED
     await db.commit()
     return {"status": "agent_paused"}
 
@@ -52,13 +53,13 @@ async def resume_agent(agent_run_id: UUID, user: User = Depends(get_current_user
     if agent.status != "paused":
         raise HTTPException(status_code=400, detail="Agent is not paused")
 
-    agent.status = "running"
+    agent.status = AgentStatus.RUNNING
     await db.commit()
 
     # Re-dispatch the agent task via Celery
     task_name = f"app.agents.{agent.agent_type.value}.run_{agent.agent_type.value}_agent"
     celery_app.send_task(task_name, args=[
-        str(agent.scan_id), agent.target_value or "", str(agent.scan_id), {}
+        str(agent.scan_id), agent.target_host or "", str(agent.scan_id), {}
     ])
     logger.info(f"Agent {agent_run_id} resumed, task {task_name} dispatched")
     return {"status": "agent_resumed", "task_name": task_name}
@@ -77,8 +78,8 @@ async def rerun_agent(agent_run_id: UUID, user: User = Depends(get_current_user)
         agent_type=original.agent_type,
         agent_name=original.agent_name,
         phase=original.phase,
-        target_value=original.target_value,
-        status="queued",
+        target_host=original.target_host,
+        status=AgentStatus.PENDING,
     )
     db.add(new_run)
     await db.commit()
@@ -87,7 +88,7 @@ async def rerun_agent(agent_run_id: UUID, user: User = Depends(get_current_user)
     # Dispatch to Celery
     task_name = f"app.agents.{original.agent_type.value}.run_{original.agent_type.value}_agent"
     celery_app.send_task(task_name, args=[
-        str(original.scan_id), original.target_value or "", str(original.scan_id), {}
+        str(original.scan_id), original.target_host or "", str(original.scan_id), {}
     ])
     logger.info(f"Agent {agent_run_id} rerun as {new_run.id}")
     return {"status": "agent_rerun_queued", "new_agent_run_id": str(new_run.id)}
@@ -109,7 +110,28 @@ async def list_health_events(
     if event_type:
         q = q.where(HealthEvent.event_type == event_type)
     result = await db.execute(q)
-    return result.scalars().all()
+    events = result.scalars().all()
+
+    # Resolve agent_type/agent_name from AgentRun (single batch query)
+    agent_run_ids = list({e.agent_run_id for e in events if e.agent_run_id})
+    if agent_run_ids:
+        ar_result = await db.execute(
+            select(AgentRun.id, AgentRun.agent_type, AgentRun.agent_name)
+            .where(AgentRun.id.in_(agent_run_ids))
+        )
+        agent_map = {row.id: (row.agent_type, row.agent_name) for row in ar_result.all()}
+    else:
+        agent_map = {}
+
+    # Build response dicts with agent info injected
+    results = []
+    for event in events:
+        d = {c.name: getattr(event, c.name) for c in event.__table__.columns}
+        agent_info = agent_map.get(event.agent_run_id, (None, None))
+        d["agent_type"] = agent_info[0]
+        d["agent_name"] = agent_info[1]
+        results.append(d)
+    return results
 
 
 @router.get("/health/{event_id}", response_model=HealthEventResponse)

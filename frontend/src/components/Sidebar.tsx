@@ -23,10 +23,12 @@ const NAV_GROUPS = [
   {
     label: "Scanning",
     items: [
+      { href: "/dashboard", label: "Dashboard", icon: "◉" },
       { href: "/scans", label: "Scans", icon: "⟐" },
+      { href: "/targets", label: "Targets", icon: "◎" },
       { href: "/agents", label: "Agents", icon: "⚡" },
       { href: "/health", label: "Health Feed", icon: "♡", badgeKey: "health" },
-      { href: "/scope", label: "Scope", icon: "◎" },
+      { href: "/scope", label: "Scope", icon: "⊘" },
     ],
   },
   {

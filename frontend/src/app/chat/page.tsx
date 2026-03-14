@@ -13,10 +13,18 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [targetName, setTargetName] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { initSession(); }, [scanId]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => {
+    if (scanId) {
+      api.getScan(scanId).then((s: { target_value?: string }) => {
+        if (s.target_value) setTargetName(s.target_value);
+      }).catch(() => {});
+    }
+  }, [scanId]);
 
   async function initSession() {
     try {
@@ -63,7 +71,7 @@ export default function ChatPage() {
       <div className="max-w-3xl mx-auto flex flex-col h-[calc(100vh-6rem)]">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-semibold">AI Copilot</h1>
-          {scanId && <span className="text-xs text-sentinel-muted">Scan: {scanId.slice(0, 8)}</span>}
+          {scanId && <span className="text-xs text-sentinel-muted">Scan: {targetName || scanId.slice(0, 8)}</span>}
         </div>
 
         {/* Messages */}
@@ -95,7 +103,24 @@ export default function ChatPage() {
                     {msg.model_used || "AI"} {msg.cost_usd ? `· $${Number(msg.cost_usd).toFixed(4)}` : ""}
                   </p>
                 )}
-                <p className="whitespace-pre-wrap">{msg.content}</p>
+                <div className="whitespace-pre-wrap [&>p]:mb-2"
+                  dangerouslySetInnerHTML={msg.role === "ai" ? {
+                    __html: (() => {
+                      // Safe markdown: escape HTML first, then apply formatting
+                      const safe = msg.content
+                        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                      return safe
+                        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                        .replace(/`([^`]+)`/g, '<code class="text-[13px] bg-sentinel-bg px-1 py-0.5 rounded font-mono">$1</code>')
+                        .replace(/^### (.+)$/gm, '<p class="text-sm font-semibold mt-3 mb-1">$1</p>')
+                        .replace(/^## (.+)$/gm, '<p class="text-base font-semibold mt-3 mb-1">$1</p>')
+                        .replace(/^- (.+)$/gm, '<p class="pl-3">• $1</p>')
+                        .replace(/\n/g, "<br/>");
+                    })(),
+                  } : undefined}
+                >
+                  {msg.role !== "ai" ? msg.content : undefined}
+                </div>
               </div>
             </div>
           ))}

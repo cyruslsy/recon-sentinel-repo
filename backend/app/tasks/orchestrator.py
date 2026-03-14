@@ -115,7 +115,7 @@ class ScanOrchestrator:
             elapsed = (utc_now() - scan_start).total_seconds()
             if elapsed > max_scan_duration_hours * 3600:
                 logger.error(f"Scan {self.state.scan_id} exceeded {max_scan_duration_hours}h global timeout")
-                await self._update_scan(ScanPhase.DONE, ScanStatus.ERROR)
+                await self._update_scan(ScanPhase.DONE, ScanStatus.FAILED)
                 self.state.current_phase = "done"
                 break
 

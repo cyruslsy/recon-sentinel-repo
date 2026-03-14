@@ -45,9 +45,12 @@ export default function ReportsPage() {
     })();
   }, []);
 
+  const [generatingStep, setGeneratingStep] = useState("");
+
   async function handleGenerate() {
     if (!selectedScan) return;
     setGenerating(true);
+    setGeneratingStep("Submitting report request...");
     try {
       const enabledSections = Object.entries(sections).filter(([, v]) => v).map(([k]) => k);
       await api.generateReport({
@@ -57,25 +60,35 @@ export default function ReportsPage() {
         sections: enabledSections,
       });
       // Poll for report completion (LLM takes 15-30s)
+      const steps = [
+        "Collecting scan findings...",
+        "Generating executive summary...",
+        "Building MITRE mapping...",
+        "Formatting report sections...",
+        "Finalizing report...",
+      ];
       let attempts = 0;
       const maxAttempts = 12;
       const poll = async () => {
         attempts++;
+        setGeneratingStep(steps[Math.min(attempts - 1, steps.length - 1)]);
         const updated = await api.listReports();
         setReports(updated);
         const latest = updated[0];
         if (latest && latest.file_path !== "pending") {
           setGenerating(false);
+          setGeneratingStep("");
           return;
         }
         if (attempts < maxAttempts) {
           setTimeout(poll, 5000);
         } else {
           setGenerating(false);
+          setGeneratingStep("");
         }
       };
       setTimeout(poll, 3000);
-    } catch { setGenerating(false); }
+    } catch { setGenerating(false); setGeneratingStep(""); }
   }
 
   return (
@@ -97,7 +110,7 @@ export default function ReportsPage() {
             <option value="">Select a scan...</option>
             {scans.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.id?.slice(0, 8)} — {s.profile} — {s.total_findings} findings — {s.status}
+                {s.target_value || s.id?.slice(0, 8)} — {s.profile} — {s.total_findings} findings — {s.status}
               </option>
             ))}
           </select>
@@ -149,7 +162,7 @@ export default function ReportsPage() {
             disabled={generating || !selectedScan}
             className="bg-sentinel-accent text-white text-sm px-6 py-2 rounded font-medium disabled:opacity-50 transition-colors hover:bg-sentinel-accent/90"
           >
-            {generating ? "Generating report..." : "Generate Report"}
+            {generating ? (generatingStep || "Generating report...") : "Generate Report"}
           </button>
         </div>
 

@@ -94,7 +94,7 @@ async def _recover_stuck_scans():
         await db.execute(
             update(Scan)
             .where(Scan.id.in_(stuck_ids))
-            .values(status=ScanStatus.ERROR, error_message="Scan timed out — no progress for 2+ hours.")
+            .values(status=ScanStatus.FAILED, error_message="Scan timed out — no progress for 2+ hours.")
         )
         await db.commit()
         logger.warning(f"Recovered {len(stuck_ids)} stuck scans")

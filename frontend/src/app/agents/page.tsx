@@ -70,6 +70,11 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <h3 className="text-sm font-medium truncate">{agent.agent_name}</h3>
+          {agent.target_host && (
+            <span className="text-[10px] text-sentinel-muted font-mono truncate">
+              {agent.target_host}
+            </span>
+          )}
           {/* MITRE tag — only shown if agent has tags */}
           {agent.mitre_tags?.length > 0 && (
             <span className="text-[9px] font-mono px-1.5 py-0.5 bg-sentinel-purple/10 text-sentinel-purple rounded">
@@ -279,8 +284,12 @@ export default function AgentsPage() {
   if (!scanId) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center h-[60vh]">
-          <p className="text-sentinel-muted">Select a scan from the Scans page to view agent progress.</p>
+        <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
+          <div className="text-4xl">🔍</div>
+          <p className="text-sentinel-muted text-sm">Select a scan from the Scans page to view agent progress.</p>
+          <a href="/scans" className="text-xs bg-sentinel-accent text-white px-4 py-2 rounded hover:bg-sentinel-accent/90 transition-colors">
+            Go to Scans
+          </a>
         </div>
       </AppLayout>
     );
@@ -294,7 +303,7 @@ export default function AgentsPage() {
           <div>
             <h1 className="text-xl font-semibold">Agent Orchestration</h1>
             <p className="text-sm text-sentinel-muted mt-0.5">
-              Scan {scanId?.slice(0, 8)} · {scan?.phase || "loading"} ·{" "}
+              {scan?.target_value || scanId?.slice(0, 8)} · {scan?.phase || "loading"} ·{" "}
               <span className={wsStatus === "connected" ? "text-sentinel-green" : "text-sentinel-muted"}>
                 WS: {wsStatus}
               </span>
@@ -315,21 +324,47 @@ export default function AgentsPage() {
           <GateBanner gate={pendingGate} scanId={scanId!} onDecided={loadScanData} />
         )}
 
-        {/* Agent Grid */}
-        <div className="grid grid-cols-2 gap-4">
-          {agents.map((agent) => (
-            <AgentCard
-              key={agent.id}
-              agent={agent}
-              wsData={wsAgentMap.get(agent.id)}
-            />
-          ))}
-          {agents.length === 0 && (
-            <p className="col-span-2 text-center text-sentinel-muted py-12 text-sm">
-              Waiting for agents to start...
-            </p>
-          )}
-        </div>
+        {/* Agent Grid — grouped by phase */}
+        {(() => {
+          const PHASE_CONFIG: Record<string, { label: string; border: string }> = {
+            passive: { label: "PHASE 1: PASSIVE", border: "border-l-sentinel-accent" },
+            active: { label: "PHASE 2: ACTIVE", border: "border-l-sentinel-green" },
+            vuln: { label: "PHASE 3: VULNERABILITY", border: "border-l-sentinel-orange" },
+          };
+          const grouped = new Map<string, typeof agents>();
+          for (const agent of agents) {
+            const phase = (agent as any).phase || "passive";
+            if (!grouped.has(phase)) grouped.set(phase, []);
+            grouped.get(phase)!.push(agent);
+          }
+          const phaseOrder = ["passive", "active", "vuln"];
+          return phaseOrder.map((phase) => {
+            const phaseAgents = grouped.get(phase);
+            if (!phaseAgents || phaseAgents.length === 0) return null;
+            const config = PHASE_CONFIG[phase] || { label: phase.toUpperCase(), border: "border-l-sentinel-muted" };
+            return (
+              <div key={phase} className="mb-6">
+                <div className={`border-l-2 ${config.border} pl-3 mb-3`}>
+                  <h2 className="text-xs font-semibold tracking-wider text-sentinel-muted">{config.label}</h2>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {phaseAgents.map((agent) => (
+                    <AgentCard
+                      key={agent.id}
+                      agent={agent}
+                      wsData={wsAgentMap.get(agent.id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          });
+        })()}
+        {agents.length === 0 && (
+          <p className="text-center text-sentinel-muted py-12 text-sm">
+            Waiting for agents to start...
+          </p>
+        )}
       </div>
     </AppLayout>
   );

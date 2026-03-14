@@ -1,6 +1,10 @@
 /**
  * Recon Sentinel — Shared TypeScript Types
- * Mirrors backend Pydantic schemas for type safety.
+ * Synced to backend Pydantic schemas (v1.2) and PostgreSQL enums.
+ *
+ * IMPORTANT: These must match backend/app/models/enums.py and
+ * backend/app/schemas/schemas.py exactly. If you add a value to
+ * a backend enum, add it here too.
  */
 
 // ─── Auth ────────────────────────────────────────────────────
@@ -9,8 +13,9 @@ export interface User {
   id: string;
   email: string;
   display_name: string;
-  role: "admin" | "operator" | "viewer";
+  role: "admin" | "tester" | "auditor";
   is_active: boolean;
+  last_login_at: string | null;
   created_at: string;
 }
 
@@ -22,26 +27,49 @@ export interface TokenResponse {
 
 // ─── Scans ───────────────────────────────────────────────────
 
-export type ScanStatus = "queued" | "running" | "paused" | "completed" | "cancelled" | "error";
+export type ScanStatus = "pending" | "running" | "paused" | "completed" | "cancelled" | "failed";
 export type ScanPhase = "passive" | "gate_1" | "active" | "gate_2" | "replan" | "vuln" | "report" | "done";
-export type ScanProfile = "full" | "passive_only" | "quick" | "stealth" | "custom";
+export type ScanProfile = "full" | "passive_only" | "quick" | "stealth" | "bounty" | "custom";
 
 export interface Scan {
   id: string;
   target_id: string;
+  target_value: string | null;
+  profile: ScanProfile;
+  status: ScanStatus;
+  phase: ScanPhase;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_seconds: number | null;
+  total_findings: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  info_count: number;
+  subdomain_count: number;
+  open_port_count: number;
+  credential_count: number;
+  is_archived: boolean;
+  created_at: string;
+}
+
+export interface ScanBrief {
+  id: string;
+  target_value: string | null;
   profile: ScanProfile;
   status: ScanStatus;
   phase: ScanPhase;
   total_findings: number;
   critical_count: number;
   high_count: number;
-  is_archived: boolean;
-  created_at: string;
+  started_at: string | null;
+  duration_seconds: number | null;
 }
 
 // ─── Agents ──────────────────────────────────────────────────
 
-export type AgentStatus = "queued" | "running" | "completed" | "error" | "cancelled" | "self_correcting" | "waiting_for_api";
+export type AgentStatus = "pending" | "running" | "self_correcting" | "completed" | "error" | "error_resolved" | "paused" | "cancelled";
 
 export interface AgentRun {
   id: string;
@@ -49,34 +77,52 @@ export interface AgentRun {
   agent_type: string;
   agent_name: string;
   status: AgentStatus;
+  phase: ScanPhase;
   progress_pct: number;
-  findings_count: number;
   current_tool: string | null;
-  last_log_line: string | null;
-  duration_seconds: number | null;
+  eta_seconds: number | null;
+  tools_used: string[];
+  mitre_tags: string[];
+  findings_count: number;
+  retry_count: number;
   started_at: string | null;
   completed_at: string | null;
-  mitre_tags: string[];
+  duration_seconds: number | null;
+  last_log_line: string | null;
+  target_host: string | null;
 }
 
 // ─── Findings ────────────────────────────────────────────────
 
 export type FindingSeverity = "critical" | "high" | "medium" | "low" | "info";
-export type FindingType = "subdomain" | "port" | "directory" | "vulnerability" | "credential" | "ssl_tls" | "email_security" | "osint" | "threat_intel" | "other";
+
+export type FindingType =
+  | "subdomain" | "port" | "vulnerability" | "credential" | "directory"
+  | "ssl_tls" | "email_security" | "threat_intel" | "cloud_asset" | "js_secret"
+  | "api_endpoint" | "dns" | "screenshot" | "osint" | "waf" | "waf_detection"
+  | "historical" | "tech_stack" | "github_leak" | "other";
+
+export type VerificationStatus = "unverified" | "confirmed" | "false_positive" | "disputed" | "remediated";
 
 export interface Finding {
   id: string;
   scan_id: string;
+  agent_run_id: string;
   finding_type: FindingType;
   severity: FindingSeverity;
+  confidence: number | null;
   value: string;
   detail: string;
   mitre_technique_ids: string[];
   mitre_tactic_ids: string[];
-  tags: string[];
   is_false_positive: boolean;
-  confidence: number | null;
+  user_notes: string | null;
+  assigned_to: string | null;
+  tags: string[];
   fingerprint: string | null;
+  verification_status: VerificationStatus;
+  severity_override: FindingSeverity | null;
+  severity_override_reason: string | null;
   created_at: string;
 }
 
@@ -88,11 +134,11 @@ export interface ApprovalGate {
   id: string;
   scan_id: string;
   gate_number: number;
-  decision: GateDecision;
   ai_summary: string;
-  ai_recommendation: Record<string, unknown> | null;
-  user_modifications: Record<string, unknown> | null;
+  ai_recommendation: Record<string, unknown>;
+  decision: GateDecision;
   decided_at: string | null;
+  created_at: string;
 }
 
 // ─── Organizations / Projects / Targets ──────────────────────
@@ -100,6 +146,7 @@ export interface ApprovalGate {
 export interface Organization {
   id: string;
   name: string;
+  description: string | null;
   created_at: string;
 }
 
@@ -107,6 +154,8 @@ export interface Project {
   id: string;
   org_id: string;
   name: string;
+  description: string | null;
+  is_bounty_mode: boolean;
   created_at: string;
 }
 
@@ -115,6 +164,7 @@ export interface Target {
   project_id: string;
   target_value: string;
   input_type: "domain" | "ip" | "cidr" | "url";
+  description: string | null;
   created_at: string;
 }
 
@@ -122,19 +172,20 @@ export interface Target {
 
 export interface ScopeItem {
   id: string;
-  project_id: string;
   item_type: "domain" | "ip" | "cidr" | "regex";
   item_value: string;
   status: "in_scope" | "out_of_scope";
+  note: string | null;
+  auto_detected: boolean;
+  created_at: string;
 }
 
 export interface ScopeViolation {
   id: string;
-  scan_id: string;
   agent_type: string;
   attempted_target: string;
   reason: string;
-  created_at: string;
+  blocked_at: string;
 }
 
 // ─── Reports ─────────────────────────────────────────────────
@@ -142,13 +193,12 @@ export interface ScopeViolation {
 export interface Report {
   id: string;
   scan_id: string;
-  report_title: string | null;
   template: string;
   format: string;
-  file_path: string;
-  ai_executive_summary: string | null;
-  generated_at: string | null;
-  created_at: string;
+  company_name: string | null;
+  report_title: string | null;
+  file_size_bytes: number | null;
+  generated_at: string;
 }
 
 // ─── Chat ────────────────────────────────────────────────────
@@ -157,19 +207,19 @@ export interface ChatSession {
   id: string;
   scan_id: string | null;
   title: string | null;
+  is_active: boolean;
+  message_count: number;
   created_at: string;
 }
 
 export interface ChatMessage {
   id: string;
-  session_id: string;
   role: "user" | "ai" | "system";
   content: string;
   slash_command: string | null;
   model_used: string | null;
-  tokens_in: number | null;
-  tokens_out: number | null;
   cost_usd: number | null;
+  latency_ms: number | null;
   created_at: string;
 }
 
@@ -178,8 +228,9 @@ export interface ChatMessage {
 export interface ApiKeyConfig {
   id: string;
   service_name: string;
-  status: "valid" | "invalid" | "expired";
-  created_at: string;
+  status: string;
+  last_used_at: string | null;
+  credits_remaining: number | null;
 }
 
 export interface LlmUsageSummary {
@@ -196,10 +247,15 @@ export interface LlmUsageSummary {
 export interface CredentialLeak {
   id: string;
   email: string;
+  username: string | null;
   breach_count: number;
+  breach_names: string[] | null;
   has_password: boolean;
   has_plaintext: boolean;
+  password_reuse_detected: boolean;
   sources: string[];
+  last_breach_date: string | null;
+  is_redacted: boolean;
 }
 
 export interface CredentialSummary {
@@ -220,6 +276,33 @@ export interface MitreHeatmapItem {
   max_severity: FindingSeverity | null;
 }
 
+export interface MitreHeatmapResponse {
+  scan_id: string;
+  techniques: MitreHeatmapItem[];
+}
+
+// ─── Health Events ──────────────────────────────────────────
+
+export type HealthEventType = "anomaly_detected" | "self_correction" | "correction_success" | "escalate_user";
+
+export interface HealthEvent {
+  id: string;
+  agent_run_id: string;
+  scan_id: string;
+  agent_type: string | null;
+  agent_name: string | null;
+  event_type: HealthEventType;
+  title: string;
+  detail: string;
+  raw_command: string | null;
+  correction_results: Record<string, unknown> | null;
+  corrected_params: Record<string, unknown> | null;
+  user_options: string[] | null;
+  user_decision: string | null;
+  decided_at: string | null;
+  created_at: string;
+}
+
 // ─── WebSocket Events ────────────────────────────────────────
 
 export interface ScanEvent {
@@ -227,19 +310,29 @@ export interface ScanEvent {
   data: Record<string, unknown>;
 }
 
-// ─── Health Events ──────────────────────────────────────────
+// ─── Scan Diff ──────────────────────────────────────────────
 
-export interface HealthEvent {
+export interface ScanDiff {
   id: string;
   scan_id: string;
-  agent_run_id: string | null;
-  agent_type: string | null;
-  agent_name: string | null;
-  event_type: "anomaly_detected" | "self_correcting" | "correction_success" | "correction_failed" | "escalate_user" | "info";
-  detail: string;
-  corrected_params: Record<string, unknown> | null;
-  raw_data: Record<string, unknown> | null;
-  user_decision: string | null;
-  decided_at: string | null;
-  created_at: string;
+  prev_scan_id: string;
+  new_findings_count: number;
+  removed_findings_count: number;
+  new_subdomains: number;
+  removed_subdomains: number;
+  new_ports: number;
+  closed_ports: number;
+  new_vulns: number;
+  resolved_vulns: number;
+  new_credentials: number;
+  ai_diff_summary: string | null;
+}
+
+export interface ScanDiffItem {
+  id: string;
+  change_type: "new" | "removed" | "changed";
+  finding_type: string;
+  value: string;
+  detail: string | null;
+  severity: FindingSeverity | null;
 }

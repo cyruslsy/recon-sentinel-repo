@@ -176,6 +176,7 @@ class ScanCreate(BaseModel):
 class ScanResponse(SentinelBase):
     id: uuid.UUID
     target_id: uuid.UUID
+    target_value: Optional[str] = None  # Denormalized from Target.target_value
     profile: ScanProfile
     status: ScanStatus
     phase: ScanPhase
@@ -197,11 +198,13 @@ class ScanResponse(SentinelBase):
 class ScanBrief(SentinelBase):
     """Lightweight scan for list views."""
     id: uuid.UUID
+    target_value: Optional[str] = None
     profile: ScanProfile
     status: ScanStatus
     phase: ScanPhase
     total_findings: int
     critical_count: int
+    high_count: int = 0
     started_at: Optional[datetime] = None
     duration_seconds: Optional[int] = None
 
@@ -247,6 +250,7 @@ class AgentRunResponse(SentinelBase):
     completed_at: Optional[datetime] = None
     duration_seconds: Optional[int] = None
     last_log_line: Optional[str] = None
+    target_host: Optional[str] = None  # Which subdomain this fan-out agent targets
 
 class AgentRunBrief(SentinelBase):
     id: uuid.UUID
@@ -264,6 +268,9 @@ class AgentRunBrief(SentinelBase):
 class HealthEventResponse(SentinelBase):
     id: uuid.UUID
     agent_run_id: uuid.UUID
+    scan_id: uuid.UUID
+    agent_type: Optional[str] = None  # Joined from AgentRun
+    agent_name: Optional[str] = None  # Joined from AgentRun
     event_type: HealthEventType
     title: str
     detail: str
@@ -271,6 +278,7 @@ class HealthEventResponse(SentinelBase):
     correction_results: Optional[dict] = None
     user_options: Optional[list[str]] = None
     user_decision: Optional[str] = None
+    decided_at: Optional[datetime] = None
     created_at: datetime
 
 class HealthEventDecision(BaseModel):

@@ -7,10 +7,11 @@ import { api } from "@/lib/api";
 import type { Scan } from "@/lib/types";
 
 const PROFILES = [
-  { value: "full", label: "Full Scan", desc: "All agents, all phases" },
+  { value: "full", label: "Full Scan", desc: "All agents, all phases, both gates" },
   { value: "passive_only", label: "Passive Only", desc: "No active probing" },
-  { value: "quick", label: "Quick Scan", desc: "Top 100 ports, fast wordlist" },
-  { value: "stealth", label: "Stealth", desc: "Low rate, minimal footprint" },
+  { value: "quick", label: "Quick Scan", desc: "Top 100 ports, fast wordlist, one gate" },
+  { value: "stealth", label: "Stealth", desc: "Low rate, no vuln scanning" },
+  { value: "bounty", label: "Bounty", desc: "Fire-and-forget, no approval gates" },
 ];
 
 export default function ScansPage() {
@@ -128,7 +129,7 @@ export default function ScansPage() {
             >
               <span className="text-lg">{statusIcon(scan.status)}</span>
               <div className="flex-1">
-                <p className="text-sm font-medium">{scan.id?.slice(0, 8)} · {scan.profile}</p>
+                <p className="text-sm font-medium">{scan.target_value || scan.id?.slice(0, 8)} · {scan.profile}</p>
                 <p className="text-xs text-sentinel-muted">{scan.phase} · {scan.total_findings} findings</p>
               </div>
               <div className="flex gap-2">

@@ -67,12 +67,21 @@ export default function HistoryPage() {
       if (d) {
         setDiff(d);
         setPrevScan(d.prev_scan_id);
-        // Load diff items
         const diffItems = await api.getDiffItems(d.id) as DiffItem[];
         setItems(diffItems);
       } else {
         setDiff(null);
         setItems([]);
+        // Auto-select previous scan of the same target as comparison baseline
+        const currentScan = scans.find(s => s.id === selectedScan);
+        if (currentScan) {
+          const sameTargetScans = scans
+            .filter(s => s.target_id === currentScan.target_id && s.id !== selectedScan && s.status === "completed")
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+          if (sameTargetScans.length > 0) {
+            setPrevScan(sameTargetScans[0].id);
+          }
+        }
       }
     } catch {}
     setLoading(false);
@@ -109,7 +118,7 @@ export default function HistoryPage() {
             <option value="">Select a scan...</option>
             {scans.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.id.slice(0, 8)} — {s.status} — {s.total_findings} findings
+                {s.target_value || s.id.slice(0, 8)} — {s.status} — {s.total_findings} findings
               </option>
             ))}
           </select>
@@ -121,11 +130,24 @@ export default function HistoryPage() {
                 className="flex-1 bg-sentinel-bg border border-sentinel-border rounded px-3 py-2 text-sm"
               >
                 <option value="">Compare against...</option>
-                {scans.filter((s) => s.id !== selectedScan).map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.id.slice(0, 8)} — {s.total_findings} findings
-                  </option>
-                ))}
+                {(() => {
+                  // Group scans by target_value for better navigation
+                  const byTarget = new Map<string, typeof scans>();
+                  for (const s of scans.filter(s => s.id !== selectedScan)) {
+                    const key = s.target_value || "Unknown Target";
+                    if (!byTarget.has(key)) byTarget.set(key, []);
+                    byTarget.get(key)!.push(s);
+                  }
+                  return Array.from(byTarget.entries()).map(([targetName, targetScans]) => (
+                    <optgroup key={targetName} label={targetName}>
+                      {targetScans.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.target_value || s.id.slice(0, 8)} — {s.total_findings} findings — {new Date(s.created_at).toLocaleDateString()}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ));
+                })()}
               </select>
               <button
                 onClick={triggerCompute}
