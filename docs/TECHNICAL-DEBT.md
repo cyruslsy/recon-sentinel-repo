@@ -1,8 +1,8 @@
 # Recon Sentinel — Outstanding Technical Debt
 
-**Last Updated:** March 14, 2026 (after Round 11 — cross-reviewer consensus fixes applied)
+**Last Updated:** March 14, 2026 (after UI redesign + schema sync v1.2)
 
-**Current State:** 68 Python files, ~13,200 lines backend, 91 tests, 17 agents, 93 endpoints
+**Current State:** 86 files (63 Python + 23 TypeScript), ~17,000 lines, 91 tests, 17 agents, 93 endpoints, 14 frontend views, 6 Alembic migrations, 32 database tables
 
 **Review Rounds:** 11 adversarial reviews, 100+ issues identified and fixed
 
@@ -19,6 +19,8 @@ All P0, P1, and P2 issues from Rounds 1-11 are resolved:
 - **R10:** Command injection in retest, CSV injection, input validation → fixed
 - **R11:** WebSocket multi-worker delivery, SYS_ADMIN removal, Celery timeouts → fixed
 - **Cross-review:** Telegram DNS pinning, bounty profile, DB pool sizing → fixed
+- **Schema sync v1.2:** 13 enum/model/schema bugs fixed, ScanStatus.ERROR→FAILED, ScanStatus.QUEUED→PENDING, AgentRun.target_host/celery_task_id added, Finding.value expanded, ScanPhase.REPLAN added, migration 0006
+- **UI redesign:** 44 items from design review implemented — finding detail panel, health feed chains, MITRE technique names, dashboard donut, targets page, sorting/pagination, skeleton loaders, empty states
 
 ---
 

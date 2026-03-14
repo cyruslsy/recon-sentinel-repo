@@ -23,6 +23,35 @@ All notable changes to Recon Sentinel are documented in this file.
 - **CORS env var** — CORS_ORIGINS configurable for production
 - **Alembic migration** for triage columns (0005)
 
+### Frontend Redesign (Design Review — 44 items implemented)
+- **Finding detail slide-over panel** — click any finding row to see full evidence, triage controls (verification status, severity override), retest button, MITRE links
+- **Health Feed event chains** — events grouped by agent_run_id with connecting lines, chain resolution badges ("3-step resolution"), agent name filter dropdown, avg fix time stat
+- **Phase-grouped agent grid** — agents organized under PASSIVE / ACTIVE / VULN headers with colored borders, fan-out subdomain labels on agent cards
+- **MITRE technique names** — resolved from /mitre/techniques API with static fallback, click-through to filtered findings, Grid/Matrix (by tactic) toggle, severity legend
+- **Dashboard overhaul** — SVG severity donut chart, mini health feed (last 5 corrections), 5 stat cards, "Launch Your First Scan" CTA
+- **Targets page** — new /targets view listing all targets with scan counts, severity summary, expandable scan history, skeleton loader
+- **Column sorting + pagination** — findings table sortable by severity/type/value/date, 50-per-page pagination with numbered buttons
+- **CSV export button** — visible in findings header, opens backend /export/csv endpoint
+- **Verification status column** — displays Unverified/Confirmed/False Positive/Disputed/Remediated with color badges
+- **Report generation progress** — 5-step progress messages during LLM generation polling
+- **Chat markdown rendering** — AI responses render bold, code, headers, bullets via safe HTML transform
+- **Empty states with CTAs** — Dashboard, Agents, Health Feed, Credentials all have illustrated empty states with action buttons
+- **Skeleton loading states** — MITRE, Health Feed, Credentials, Targets pages
+- **Sidebar** — added Targets link, Dashboard moved to Scanning group
+- **History page** — target-aware diff auto-selection, comparison dropdown grouped by target via optgroup
+
+### Schema Sync (v1.2)
+- **target_value on all scan displays** — ScanResponse/ScanBrief now include target domain name, resolved via batch Target query in 8 frontend locations
+- **AgentRun.target_host** — new DB column tracking which subdomain each fan-out agent targets
+- **AgentRun.celery_task_id** — new DB column for task revocation on scan stop
+- **HealthEventResponse** — agent_type/agent_name joined from AgentRun via batch query
+- **Finding.value** — expanded from VARCHAR(1000) to VARCHAR(2000) for long Nuclei URLs
+- **ScanBrief.high_count** — added for scan list severity badges
+- **ScanPhase.REPLAN** — added to enum (orchestrator was using it, DB enum lacked it)
+- **types.ts rewrite** — 6 enum fixes (ScanStatus, AgentStatus, UserRole, HealthEventType, FindingType, ScanProfile), 22 FindingType values, all interface fields matched to backend schemas
+- **Alembic migration 0006** — AgentRun columns + Finding.value expansion
+- **auth.tsx** — now imports shared User type instead of redefining
+
 ### Fixed (R9-R11)
 - **WebSocket event delivery** — Redis subscriber per connection for multi-worker mode
 - **SYS_ADMIN removed** from Docker — Chromium uses --no-sandbox instead
@@ -34,6 +63,18 @@ All notable changes to Recon Sentinel are documented in this file.
 - **Command injection** — template_id validated with regex in retest endpoint
 - **CSV injection** — cell sanitization for formula triggers
 - **Input validation** — Literal types on verification_status and severity_override
+
+### Bug Fixes (Schema Audit — 13 bugs found and fixed)
+- **ScanStatus.ERROR → FAILED** — enum value didn't exist, crashed at runtime (3 files: scans.py, orchestrator.py, maintenance.py)
+- **ScanStatus.QUEUED → PENDING** — same issue in monitoring.py and scans.py stop endpoint
+- **AgentStatus "queued" → PENDING** — rerun_agent used non-existent enum value
+- **AgentRun.target_value → target_host** — agents.py referenced wrong column name (3 lines)
+- **SQLAlchemy ORM mutation** — scan.target_value = ... crashes on mapped objects; converted to dict approach
+- **HealthEvent ORM mutation** — same issue with event.agent_type; converted to dict approach
+- **HealthEventResponse duplicate fields** — removed confusing corrected_params alias
+- **ScanBrief response mismatch** — frontend accessed medium_count etc. not in ScanBrief; changed to ScanResponse
+- **JSON export 404** — frontend had JSON export button but backend only has CSV; removed button
+- **AgentStatus string assignment** — raw strings replaced with enum values in pause/resume
 
 ### Security
 - 93 endpoints with authorization (13 authorize_* helpers)

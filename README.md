@@ -349,7 +349,7 @@ recon-sentinel-repo/
 │           └── maintenance.py        Stuck scan recovery + archival
 ├── frontend/                         TypeScript + Next.js 14 + Tailwind
 │   └── src/
-│       ├── app/                      12 page views
+│       ├── app/                      14 page views
 │       ├── components/               Sidebar, AppLayout, ErrorBoundary
 │       ├── hooks/                    WebSocket hook
 │       └── lib/                      Typed API client, auth context, types.ts
@@ -368,13 +368,14 @@ recon-sentinel-repo/
 
 | Metric | Value |
 |--------|-------|
-| Total code lines | 16,200+ |
-| Python lines | 13,100+ |
-| TypeScript lines | 3,000+ |
-| Files | 90+ |
+| Total code lines | 17,000+ |
+| Python lines | 12,800+ |
+| TypeScript lines | 4,200+ |
+| Files | 86+ |
 | API endpoints | 93 REST + 2 WebSocket |
 | Database tables | 32 |
-| Frontend views | 12 |
+| Alembic migrations | 6 |
+| Frontend views | 14 |
 | Scanning agents | 17 |
 | MITRE ATT&CK techniques | 15 |
 | Self-correction patterns | 11 |

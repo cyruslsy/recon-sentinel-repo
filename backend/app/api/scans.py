@@ -125,7 +125,7 @@ async def stop_scan(scan_id: UUID, user: User = Depends(get_current_user), db: A
     result = await db.execute(
         sel(AgentRun.celery_task_id).where(
             AgentRun.scan_id == scan_id,
-            AgentRun.status.in_(["running", "queued"]),
+            AgentRun.status.in_(["running", "pending"]),
         )
     )
     task_ids = [r[0] for r in result.all() if r[0]]

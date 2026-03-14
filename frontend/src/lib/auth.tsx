@@ -2,13 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { api, setAccessToken, getAccessToken } from "@/lib/api";
-
-interface User {
-  id: string;
-  email: string;
-  display_name: string;
-  role: string;
-}
+import type { User } from "@/lib/types";
 
 interface AuthContextType {
   user: User | null;

@@ -33,6 +33,7 @@ class ScanPhase(str, enum.Enum):
     GATE_1 = "gate_1"
     ACTIVE = "active"
     GATE_2 = "gate_2"
+    REPLAN = "replan"
     VULN = "vuln"
     REPORT = "report"
     DONE = "done"

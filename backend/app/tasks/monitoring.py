@@ -45,7 +45,7 @@ async def _run_scheduled_rescans() -> dict:
         # Subquery: targets that have a running/queued scan right now (skip these)
         active_scan_targets = (
             select(Scan.target_id)
-            .where(Scan.status.in_([ScanStatus.RUNNING, ScanStatus.QUEUED, ScanStatus.PAUSED]))
+            .where(Scan.status.in_([ScanStatus.RUNNING, ScanStatus.PENDING, ScanStatus.PAUSED]))
             .distinct()
             .subquery()
         )
