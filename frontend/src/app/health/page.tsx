@@ -283,7 +283,7 @@ export default function HealthFeedPage() {
                       <div className="mt-3 p-3 bg-sentinel-bg rounded-md border border-sentinel-border">
                         <p className="text-[10px] text-sentinel-muted mb-1 font-medium">COMMAND</p>
                         <pre className="text-xs font-mono text-sentinel-muted overflow-x-auto whitespace-pre-wrap">
-                          {event.raw_command}
+                          {event.raw_command.replace(/[<>]/g, (c: string) => c === "<" ? "&lt;" : "&gt;")}
                         </pre>
                       </div>
                     )}

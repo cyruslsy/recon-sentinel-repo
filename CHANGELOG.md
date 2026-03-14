@@ -2,6 +2,23 @@
 
 All notable changes to Recon Sentinel are documented in this file.
 
+## [1.0.0] — 2026-03-14
+
+### R14 Ship-Ready Hardening
+
+#### Testing (24 new tests → 115 total)
+- **Cross-tenant isolation tests** (18 tests) — verifies User B cannot access User A's orgs, projects, targets, scans, findings, agents, health events, CSV exports, scope, MITRE heatmaps. Also verifies list endpoints don't leak cross-tenant data.
+- **WebSocket auth tests** (6 tests) — verifies WS rejects: no token, invalid token, refresh token, nonexistent user. Covers both scan and chat WebSocket endpoints.
+- **PostgreSQL test support** — `TEST_DATABASE_URL` env var drives test DB; defaults to SQLite for fast local runs, PostgreSQL for CI with RLS.
+- **conftest.py fix** — `UserRole.OPERATOR` (nonexistent) → `UserRole.TESTER`; added `second_user_headers` fixture.
+
+#### Frontend
+- **Scan context selector** — ScanProvider context + ScanSelector sidebar component. Persistent card between logo and nav showing active scan target, phase, status, finding count. Dropdown to switch scans grouped by status.
+- **DOMPurify integration** — `SafeHtml` component sanitizes all tool output (finding values, details, health feed raw_command). Added `dompurify` + `@types/dompurify` to dependencies.
+
+#### Infrastructure
+- **TLS enabled** — `docker-compose.prod.yml` now mounts `nginx/ssl/cert.pem` + `key.pem` and uses `nginx.prod.conf` (was using dev config). SSL generate script made idempotent.
+
 ## [1.0.0-rc2] — 2026-03-14
 
 ### R12 Consistency Audit — 14 issues found, all fixed

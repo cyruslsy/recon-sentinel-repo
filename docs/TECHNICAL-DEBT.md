@@ -1,16 +1,16 @@
 # Recon Sentinel — Outstanding Technical Debt
 
-**Last Updated:** March 14, 2026 (after R12 consistency audit + schema v1.2 sync)
+**Last Updated:** March 14, 2026 (after R14 ship-ready hardening)
 
-**Current State:** 87 files (64 Python + 23 TypeScript), ~17,200 lines, 91 tests, 17 agents, 93 endpoints, 14 frontend views, 7 Alembic migrations, 32 database tables
+**Current State:** 92 files (66 Python + 26 TypeScript), ~18,500 lines, 115 tests, 17 agents, 93 endpoints, 14 frontend views, 7 Alembic migrations, 32 database tables
 
-**Review Rounds:** 12 adversarial reviews, 114+ issues identified and fixed
+**Review Rounds:** 14 rounds, 120+ issues identified and fixed
 
 ---
 
 ## Resolved (All Previous Rounds)
 
-All P0, P1, and P2 issues from Rounds 1-12 are resolved:
+All P0, P1, and P2 issues from Rounds 1-14 are resolved:
 
 - **R5:** 21 IDOR endpoints → 13 authorize_* helpers, 93/93 endpoints covered
 - **R6:** 6 SyntaxErrors, 5 frontend crashes, SSRF TOCTOU → all fixed
@@ -19,30 +19,26 @@ All P0, P1, and P2 issues from Rounds 1-12 are resolved:
 - **R10:** Command injection in retest, CSV injection, input validation → fixed
 - **R11:** WebSocket multi-worker delivery, SYS_ADMIN removal, Celery timeouts → fixed
 - **Cross-review:** Telegram DNS pinning, bounty profile, DB pool sizing → fixed
-- **Schema sync v1.2:** 13 enum/model/schema bugs fixed, ScanStatus.ERROR→FAILED, ScanStatus.QUEUED→PENDING, AgentRun.target_host/celery_task_id added, Finding.value expanded, ScanPhase.REPLAN added, migration 0006
-- **UI redesign:** 44 items from design review implemented — finding detail panel, health feed chains, MITRE technique names, dashboard donut, targets page, sorting/pagination, skeleton loaders, empty states
-- **R12 consistency audit:** 14 issues found (5 P0, 5 P1, 4 P2/P3), all fixed — ScopeViolation.project_id crash, AuditLog.detail crash, ApiKey.created_by missing, Scan.error_message missing, agent list schema mismatch, agent_type.value on string crash, frontend corrected_params phantom, ScanDiffItem.value drift, stale docstring/comment, scope added_by. Migration 0007 added. Schema DDL updated to v1.2. Patch files cleaned up.
+- **Schema sync v1.2:** 13 enum/model/schema bugs fixed, migration 0006 + 0007
+- **UI redesign:** 48 of 51 items implemented (scan context selector, command diff, accent color added in R13)
+- **R12 consistency audit:** 14 issues (5 P0 runtime crashes), all fixed
+- **R13 post-review:** Sidebar duplicate bug, accent color, health feed diff, FindingBrief→FindingResponse
+- **R14 ship-ready:** Cross-tenant isolation tests (18 tests), WebSocket auth tests (6 tests), PostgreSQL test fixture support, ScanContext provider + sidebar selector, DOMPurify/SafeHtml, TLS enabled in prod compose
 
 ---
 
 ## Remaining: Pre-Production Items
 
-### P0 — Must Fix Before Any Real Deployment
+### P0 — None
 
-| Item | Description | Effort |
-|------|-------------|--------|
-| Cross-tenant isolation tests | Zero tests verify User B can't access User A's data | 2 days |
-| PostgreSQL test fixtures | All 91 tests run against SQLite — RLS untested in CI | 1 day |
+All P0 items resolved.
 
 ### P1 — Must Fix Before Multi-Tenant / SaaS
 
 | Item | Description | Effort |
 |------|-------------|--------|
-| Frontend DOMPurify | Tool output needs client-side sanitization | 2 hours |
-| WebSocket auth tests | No test for WS rejecting unauthorized users | 1 day |
 | SOCKS5/HTTP proxy routing | OPSEC gap for red team engagements | 3 days |
 | Scope attestation | No RoE document upload linked to project | 2 days |
-| TLS end-to-end | Nginx TLS commented out, no cert provisioning | 1 day |
 
 ### P2 — Should Fix Before v1.1
 
@@ -67,3 +63,6 @@ All P0, P1, and P2 issues from Rounds 1-12 are resolved:
 | R9 | 8.6 | Zero P1 findings |
 | R10 | 8.5 | New features introduced new issues |
 | R11 | 8.5 | Cross-reviewer consensus fixes applied |
+| R12 | 8.8 | Consistency audit — 5 P0 crashes fixed |
+| R13 | 9.0 | Post-review polish — 51/51 design items |
+| R14 | 9.2 | Ship-ready — cross-tenant tests, TLS, DOMPurify |

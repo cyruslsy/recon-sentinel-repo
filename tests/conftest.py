@@ -4,6 +4,7 @@ Provides: async test client, test database session, authenticated user helper
 """
 
 import asyncio
+import os
 import uuid
 from typing import AsyncGenerator
 
@@ -18,8 +19,11 @@ from app.main import app
 from app.models.models import User
 from app.models.enums import UserRole
 
-# Use SQLite for tests (fast, no external deps)
-TEST_DB_URL = "sqlite+aiosqlite:///./test.db"
+# Use PostgreSQL if TEST_DATABASE_URL is set, otherwise SQLite (fast, no deps)
+TEST_DB_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "sqlite+aiosqlite:///./test.db",
+)
 
 test_engine = create_async_engine(TEST_DB_URL, echo=False)
 TestSessionLocal = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
@@ -95,10 +99,17 @@ async def second_user(db: AsyncSession) -> User:
         email="other@example.com",
         password_hash=hash_password("OtherPassword123"),
         display_name="Other User",
-        role=UserRole.OPERATOR,
+        role=UserRole.TESTER,
         is_active=True,
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
     return user
+
+
+@pytest_asyncio.fixture
+async def second_user_headers(second_user: User) -> dict:
+    """JWT auth headers for the second (non-admin) user."""
+    token = create_access_token(str(second_user.id), second_user.role.value)
+    return {"Authorization": f"Bearer {token}"}
