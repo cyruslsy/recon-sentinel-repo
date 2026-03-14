@@ -235,6 +235,9 @@ class Scan(Base, TimestampMixin):
     retain_until: Mapped[Optional[date]] = mapped_column(Date)
     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Error tracking for resume
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+
     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
 
     # Relationships
@@ -640,7 +643,7 @@ class ScanDiffItem(Base):
     diff_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scan_diffs.id", ondelete="CASCADE"), nullable=False)
     change_type: Mapped[str] = mapped_column(String(20), nullable=False)
     finding_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    value: Mapped[str] = mapped_column(String(1000), nullable=False)
+    value: Mapped[str] = mapped_column(String(2000), nullable=False)
     detail: Mapped[Optional[str]] = mapped_column(Text)
     severity: Mapped[Optional[FindingSeverity]] = mapped_column(
         Enum(FindingSeverity, name="finding_severity", create_type=False)
@@ -784,6 +787,7 @@ class ApiKey(Base, TimestampMixin):
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     last_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     credits_remaining: Mapped[Optional[int]] = mapped_column(Integer)
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
 
     __table_args__ = (Index("idx_api_keys_service", "service_name"),)
 

@@ -296,7 +296,6 @@ export interface HealthEvent {
   detail: string;
   raw_command: string | null;
   correction_results: Record<string, unknown> | null;
-  corrected_params: Record<string, unknown> | null;
   user_options: string[] | null;
   user_decision: string | null;
   decided_at: string | null;

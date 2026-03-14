@@ -23,7 +23,7 @@ router = APIRouter()
 
 # ─── Agent Runs ───────────────────────────────────────────────────────
 
-@router.get("/", response_model=list[AgentRunBrief])
+@router.get("/", response_model=list[AgentRunResponse])
 async def list_agent_runs(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     await authorize_scan(scan_id, user, db)
     result = await db.execute(
@@ -57,7 +57,7 @@ async def resume_agent(agent_run_id: UUID, user: User = Depends(get_current_user
     await db.commit()
 
     # Re-dispatch the agent task via Celery
-    task_name = f"app.agents.{agent.agent_type.value}.run_{agent.agent_type.value}_agent"
+    task_name = f"app.agents.{agent.agent_type}.run_{agent.agent_type}_agent"
     celery_app.send_task(task_name, args=[
         str(agent.scan_id), agent.target_host or "", str(agent.scan_id), {}
     ])
@@ -86,7 +86,7 @@ async def rerun_agent(agent_run_id: UUID, user: User = Depends(get_current_user)
     await db.refresh(new_run)
 
     # Dispatch to Celery
-    task_name = f"app.agents.{original.agent_type.value}.run_{original.agent_type.value}_agent"
+    task_name = f"app.agents.{original.agent_type}.run_{original.agent_type}_agent"
     celery_app.send_task(task_name, args=[
         str(original.scan_id), original.target_host or "", str(original.scan_id), {}
     ])

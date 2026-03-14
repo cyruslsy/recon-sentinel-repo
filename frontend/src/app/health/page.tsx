@@ -245,9 +245,9 @@ export default function HealthFeedPage() {
                     <p className="text-sm mt-2 text-sentinel-text/90">{event.detail}</p>
 
                     {/* Before/After correction diff */}
-                    {(event.correction_results || event.corrected_params) && (
+                    {event.correction_results && (
                       <div className="mt-2 space-y-1">
-                        {Object.entries(event.correction_results || event.corrected_params || {}).map(([k, v]) => {
+                        {Object.entries(event.correction_results).map(([k, v]) => {
                           const val = String(v);
                           return (
                             <div key={k} className="text-[11px] font-mono bg-sentinel-bg rounded px-2 py-1 border border-sentinel-border">

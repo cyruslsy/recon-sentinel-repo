@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 class BaseAgent(ABC):
     """
-    Abstract base class for all 14 specialist agents.
+    Abstract base class for all 17 specialist agents.
 
     Subclasses must implement:
       - agent_type: str (e.g., "subdomain", "port_scan")

@@ -1,0 +1,210 @@
+diff --git a/backend/alembic/versions/0007_missing_columns.py b/backend/alembic/versions/0007_missing_columns.py
+new file mode 100644
+index 0000000..573ce58
+--- /dev/null
++++ b/backend/alembic/versions/0007_missing_columns.py
+@@ -0,0 +1,37 @@
++"""0007 — Add missing columns: ApiKey.created_by, Scan.error_message
++
++Fixes:
++- ApiKey.created_by: settings.py reads/writes this column but it didn't exist in the model
++- Scan.error_message: resume_scan sets error_message=None but column was missing from Scan
++"""
++
++from alembic import op
++import sqlalchemy as sa
++from sqlalchemy.dialects.postgresql import UUID as PgUUID
++
++revision = "0007"
++down_revision = "0006"
++branch_labels = None
++depends_on = None
++
++
++def upgrade():
++    # ApiKey.created_by — FK to users.id
++    # For existing rows, we need a default. Since this is a fresh deploy (no 0001_initial),
++    # the table should be empty. If not, this will fail and needs manual backfill.
++    op.add_column("api_keys", sa.Column("created_by", PgUUID(as_uuid=True), nullable=True))
++    op.create_foreign_key(
++        "fk_api_keys_created_by", "api_keys", "users",
++        ["created_by"], ["id"],
++    )
++    # Make NOT NULL after backfill (safe for fresh deploys)
++    op.alter_column("api_keys", "created_by", nullable=False)
++
++    # Scan.error_message — nullable text for resume error tracking
++    op.add_column("scans", sa.Column("error_message", sa.Text(), nullable=True))
++
++
++def downgrade():
++    op.drop_column("scans", "error_message")
++    op.drop_constraint("fk_api_keys_created_by", "api_keys", type_="foreignkey")
++    op.drop_column("api_keys", "created_by")
+diff --git a/backend/app/agents/base.py b/backend/app/agents/base.py
+index 820a189..ac7d241 100644
+--- a/backend/app/agents/base.py
++++ b/backend/app/agents/base.py
+@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
+ 
+ class BaseAgent(ABC):
+     """
+-    Abstract base class for all 14 specialist agents.
++    Abstract base class for all 17 specialist agents.
+ 
+     Subclasses must implement:
+       - agent_type: str (e.g., "subdomain", "port_scan")
+diff --git a/backend/app/api/agents.py b/backend/app/api/agents.py
+index 4a44d84..5ac8005 100644
+--- a/backend/app/api/agents.py
++++ b/backend/app/api/agents.py
+@@ -23,7 +23,7 @@ router = APIRouter()
+ 
+ # ─── Agent Runs ───────────────────────────────────────────────────────
+ 
+-@router.get("/", response_model=list[AgentRunBrief])
++@router.get("/", response_model=list[AgentRunResponse])
+ async def list_agent_runs(scan_id: UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+     await authorize_scan(scan_id, user, db)
+     result = await db.execute(
+@@ -57,7 +57,7 @@ async def resume_agent(agent_run_id: UUID, user: User = Depends(get_current_user
+     await db.commit()
+ 
+     # Re-dispatch the agent task via Celery
+-    task_name = f"app.agents.{agent.agent_type.value}.run_{agent.agent_type.value}_agent"
++    task_name = f"app.agents.{agent.agent_type}.run_{agent.agent_type}_agent"
+     celery_app.send_task(task_name, args=[
+         str(agent.scan_id), agent.target_host or "", str(agent.scan_id), {}
+     ])
+@@ -86,7 +86,7 @@ async def rerun_agent(agent_run_id: UUID, user: User = Depends(get_current_user)
+     await db.refresh(new_run)
+ 
+     # Dispatch to Celery
+-    task_name = f"app.agents.{original.agent_type.value}.run_{original.agent_type.value}_agent"
++    task_name = f"app.agents.{original.agent_type}.run_{original.agent_type}_agent"
+     celery_app.send_task(task_name, args=[
+         str(original.scan_id), original.target_host or "", str(original.scan_id), {}
+     ])
+diff --git a/backend/app/api/credentials.py b/backend/app/api/credentials.py
+index f39ec86..bf0b128 100644
+--- a/backend/app/api/credentials.py
++++ b/backend/app/api/credentials.py
+@@ -59,7 +59,7 @@ async def get_credential(cred_id: UUID, user: User = Depends(get_current_user),
+         action="credential_view",
+         resource_type="credential_leak",
+         resource_id=cred_id,
+-        detail=f"User {user.email} viewed credential {cred_id}",
++        metadata_={"detail": f"User {user.email} viewed credential {cred_id}"},
+     )
+     db.add(audit)
+     await db.commit()
+diff --git a/backend/app/api/scope.py b/backend/app/api/scope.py
+index 16488e1..ab8df47 100644
+--- a/backend/app/api/scope.py
++++ b/backend/app/api/scope.py
+@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
+ from app.core.database import get_db
+ from app.core.auth import get_current_user
+ from app.core.authorization import authorize_project
+-from app.models.models import User, ScopeDefinition, ScopeViolation
++from app.models.models import User, ScopeDefinition, ScopeViolation, Scan, Target
+ from app.schemas.schemas import (
+     ScopeItemCreate, ScopeItemResponse, ScopeItemUpdate,
+     ScopeViolationResponse, ScopeCheckRequest, ScopeCheckResponse,
+@@ -39,7 +39,7 @@ async def list_scope_items(project_id: UUID, status: str | None = None, user: Us
+ async def add_scope_item(project_id: UUID, data: ScopeItemCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+     await authorize_project(project_id, user, db)
+     """Add a domain, IP, CIDR, or regex to scope (in-scope or excluded)."""
+-    item = ScopeDefinition(**data.model_dump(), project_id=project_id)
++    item = ScopeDefinition(**data.model_dump(), project_id=project_id, added_by=user.id)
+     db.add(item)
+     await db.commit()
+     await db.refresh(item)
+@@ -82,7 +82,14 @@ async def check_scope(project_id: UUID, data: ScopeCheckRequest, user: User = De
+ async def list_violations(project_id: UUID, scan_id: UUID | None = None, limit: int = 50, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+     """List scope violations (blocked requests) for audit trail."""
+     await authorize_project(project_id, user, db)
+-    q = select(ScopeViolation).where(ScopeViolation.project_id == project_id).order_by(ScopeViolation.blocked_at.desc()).limit(limit)
++    q = (
++        select(ScopeViolation)
++        .join(Scan, ScopeViolation.scan_id == Scan.id)
++        .join(Target, Scan.target_id == Target.id)
++        .where(Target.project_id == project_id)
++        .order_by(ScopeViolation.blocked_at.desc())
++        .limit(limit)
++    )
+     if scan_id:
+         q = q.where(ScopeViolation.scan_id == scan_id)
+     result = await db.execute(q)
+diff --git a/backend/app/models/models.py b/backend/app/models/models.py
+index 8d69781..af48943 100644
+--- a/backend/app/models/models.py
++++ b/backend/app/models/models.py
+@@ -235,6 +235,9 @@ class Scan(Base, TimestampMixin):
+     retain_until: Mapped[Optional[date]] = mapped_column(Date)
+     is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
+ 
++    # Error tracking for resume
++    error_message: Mapped[Optional[str]] = mapped_column(Text)
++
+     created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+ 
+     # Relationships
+@@ -640,7 +643,7 @@ class ScanDiffItem(Base):
+     diff_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scan_diffs.id", ondelete="CASCADE"), nullable=False)
+     change_type: Mapped[str] = mapped_column(String(20), nullable=False)
+     finding_type: Mapped[str] = mapped_column(String(100), nullable=False)
+-    value: Mapped[str] = mapped_column(String(1000), nullable=False)
++    value: Mapped[str] = mapped_column(String(2000), nullable=False)
+     detail: Mapped[Optional[str]] = mapped_column(Text)
+     severity: Mapped[Optional[FindingSeverity]] = mapped_column(
+         Enum(FindingSeverity, name="finding_severity", create_type=False)
+@@ -784,6 +787,7 @@ class ApiKey(Base, TimestampMixin):
+     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+     last_verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+     credits_remaining: Mapped[Optional[int]] = mapped_column(Integer)
++    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+ 
+     __table_args__ = (Index("idx_api_keys_service", "service_name"),)
+ 
+diff --git a/backend/app/tasks/monitoring.py b/backend/app/tasks/monitoring.py
+index fb9a905..9ab1fdb 100644
+--- a/backend/app/tasks/monitoring.py
++++ b/backend/app/tasks/monitoring.py
+@@ -42,7 +42,7 @@ async def _run_scheduled_rescans() -> dict:
+             .subquery()
+         )
+ 
+-        # Subquery: targets that have a running/queued scan right now (skip these)
++        # Subquery: targets that have a running/pending scan right now (skip these)
+         active_scan_targets = (
+             select(Scan.target_id)
+             .where(Scan.status.in_([ScanStatus.RUNNING, ScanStatus.PENDING, ScanStatus.PAUSED]))
+diff --git a/frontend/src/app/health/page.tsx b/frontend/src/app/health/page.tsx
+index f948175..5d8f501 100644
+--- a/frontend/src/app/health/page.tsx
++++ b/frontend/src/app/health/page.tsx
+@@ -245,9 +245,9 @@ export default function HealthFeedPage() {
+                     <p className="text-sm mt-2 text-sentinel-text/90">{event.detail}</p>
+ 
+                     {/* Before/After correction diff */}
+-                    {(event.correction_results || event.corrected_params) && (
++                    {event.correction_results && (
+                       <div className="mt-2 space-y-1">
+-                        {Object.entries(event.correction_results || event.corrected_params || {}).map(([k, v]) => {
++                        {Object.entries(event.correction_results).map(([k, v]) => {
+                           const val = String(v);
+                           return (
+                             <div key={k} className="text-[11px] font-mono bg-sentinel-bg rounded px-2 py-1 border border-sentinel-border">
+diff --git a/frontend/src/lib/types.ts b/frontend/src/lib/types.ts
+index 20921e4..4171fb8 100644
+--- a/frontend/src/lib/types.ts
++++ b/frontend/src/lib/types.ts
+@@ -296,7 +296,6 @@ export interface HealthEvent {
+   detail: string;
+   raw_command: string | null;
+   correction_results: Record<string, unknown> | null;
+-  corrected_params: Record<string, unknown> | null;
+   user_options: string[] | null;
+   user_decision: string | null;
+   decided_at: string | null;

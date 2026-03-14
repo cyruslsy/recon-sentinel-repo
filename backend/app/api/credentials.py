@@ -59,7 +59,7 @@ async def get_credential(cred_id: UUID, user: User = Depends(get_current_user), 
         action="credential_view",
         resource_type="credential_leak",
         resource_id=cred_id,
-        detail=f"User {user.email} viewed credential {cred_id}",
+        metadata_={"detail": f"User {user.email} viewed credential {cred_id}"},
     )
     db.add(audit)
     await db.commit()

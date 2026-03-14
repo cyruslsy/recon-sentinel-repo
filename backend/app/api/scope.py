@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.auth import get_current_user
 from app.core.authorization import authorize_project
-from app.models.models import User, ScopeDefinition, ScopeViolation
+from app.models.models import User, ScopeDefinition, ScopeViolation, Scan, Target
 from app.schemas.schemas import (
     ScopeItemCreate, ScopeItemResponse, ScopeItemUpdate,
     ScopeViolationResponse, ScopeCheckRequest, ScopeCheckResponse,
@@ -39,7 +39,7 @@ async def list_scope_items(project_id: UUID, status: str | None = None, user: Us
 async def add_scope_item(project_id: UUID, data: ScopeItemCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     await authorize_project(project_id, user, db)
     """Add a domain, IP, CIDR, or regex to scope (in-scope or excluded)."""
-    item = ScopeDefinition(**data.model_dump(), project_id=project_id)
+    item = ScopeDefinition(**data.model_dump(), project_id=project_id, added_by=user.id)
     db.add(item)
     await db.commit()
     await db.refresh(item)
@@ -82,7 +82,14 @@ async def check_scope(project_id: UUID, data: ScopeCheckRequest, user: User = De
 async def list_violations(project_id: UUID, scan_id: UUID | None = None, limit: int = 50, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """List scope violations (blocked requests) for audit trail."""
     await authorize_project(project_id, user, db)
-    q = select(ScopeViolation).where(ScopeViolation.project_id == project_id).order_by(ScopeViolation.blocked_at.desc()).limit(limit)
+    q = (
+        select(ScopeViolation)
+        .join(Scan, ScopeViolation.scan_id == Scan.id)
+        .join(Target, Scan.target_id == Target.id)
+        .where(Target.project_id == project_id)
+        .order_by(ScopeViolation.blocked_at.desc())
+        .limit(limit)
+    )
     if scan_id:
         q = q.where(ScopeViolation.scan_id == scan_id)
     result = await db.execute(q)
