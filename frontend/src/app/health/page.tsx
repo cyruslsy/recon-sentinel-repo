@@ -247,7 +247,26 @@ export default function HealthFeedPage() {
                     {/* Before/After correction diff */}
                     {event.correction_results && (
                       <div className="mt-2 space-y-1">
-                        {Object.entries(event.correction_results).map(([k, v]) => {
+                        {/* Show strikethrough old → green new when raw_command available */}
+                        {event.raw_command && event.event_type === "self_correction" && (
+                          <div className="text-[11px] font-mono bg-sentinel-bg rounded px-3 py-2 border border-sentinel-border space-y-1">
+                            <div className="flex items-start gap-2">
+                              <span className="text-sentinel-red/70 select-none shrink-0">−</span>
+                              <span className="text-sentinel-red/70 line-through break-all">{event.raw_command}</span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="text-sentinel-green select-none shrink-0">+</span>
+                              <span className="text-sentinel-green break-all">
+                                {event.raw_command.split(" ").concat(
+                                  Object.entries(event.correction_results).map(([k, v]) => `--${k.replace(/_/g, "-")} ${v}`)
+                                ).join(" ")}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        {/* Fallback: key-value badges for non-command corrections */}
+                        {(!event.raw_command || event.event_type !== "self_correction") &&
+                          Object.entries(event.correction_results).map(([k, v]) => {
                           const val = String(v);
                           return (
                             <div key={k} className="text-[11px] font-mono bg-sentinel-bg rounded px-2 py-1 border border-sentinel-border">

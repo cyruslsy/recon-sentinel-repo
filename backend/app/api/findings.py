@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/", response_model=list[FindingBrief])
+@router.get("/", response_model=list[FindingResponse])
 async def list_findings(
     scan_id: UUID,
     severity: FindingSeverity | None = None,

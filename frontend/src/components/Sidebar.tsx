@@ -15,12 +15,6 @@ interface NavItem {
 
 const NAV_GROUPS = [
   {
-    label: null,
-    items: [
-      { href: "/dashboard", label: "Dashboard", icon: "◉" },
-    ],
-  },
-  {
     label: "Scanning",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "◉" },

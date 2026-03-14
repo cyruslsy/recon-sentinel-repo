@@ -4,19 +4,26 @@ All notable changes to Recon Sentinel are documented in this file.
 
 ## [1.0.0-rc2] — 2026-03-14
 
-### R12 Consistency Audit — 14 issues found, 12 fixed
+### R12 Consistency Audit — 14 issues found, all fixed
 - **P0 Fix:** `ScopeViolation.project_id` → join through Scan→Target (scope.py)
 - **P0 Fix:** `AuditLog(detail=...)` → `AuditLog(metadata_={...})` (credentials.py)
 - **P0 Fix:** Added `created_by` column to ApiKey model + migration 0007
 - **P0 Fix:** Added `error_message` column to Scan model + migration 0007
 - **P0 Fix:** Agent list endpoint `AgentRunBrief` → `AgentRunResponse` (agents.py)
+- **P0 Fix:** Findings list endpoint `FindingBrief` → `FindingResponse` (findings.py) — detail panel had 10 undefined fields
 - **P1 Fix:** Removed phantom `corrected_params` from frontend HealthEvent type + health page
 - **P1 Fix:** `ScanDiffItem.value` model synced to String(2000) matching migration 0006
 - **P1 Fix:** BaseAgent docstring 14 → 17 agents
 - **P1 Fix:** monitoring.py comment "running/queued" → "running/pending"
 - **P1 Fix:** `agent_type.value` → `agent_type` (plain string, not enum) in resume/rerun
 - **P2 Fix:** `added_by=user.id` set in add_scope_item (scope.py)
-- **Schema:** `database/schema-v1.1.sql` updated to v1.2 — all model/migration changes synced
+- **Schema:** `database/schema-v1.1.sql` updated to v1.2, old v1.1 removed
+
+### R12 Post-Implementation Review — 4 remaining items fixed
+- **Bug Fix:** Duplicate Dashboard entry in sidebar (appeared in both unlabeled and Scanning groups)
+- **UI:** Health Feed before/after command diff — strikethrough old command in red, new command in green
+- **Design:** Accent color shifted from #3B82F6 (blue) to #06B6D4 (cyan) — differentiates from generic SaaS
+- **Cleanup:** README rewritten — cleaner layout, updated stats, removed verbose ASCII art
 
 ## [1.0.0-rc1] — 2026-03-14
 
