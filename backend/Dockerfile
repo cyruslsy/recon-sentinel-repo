@@ -40,9 +40,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     dnsutils \
     openssl \
     chromium \
-    theharvester \
-    seclists \
+    git \
     && rm -rf /var/lib/apt/lists/*
+
+# Install theHarvester via pip (not available as apt package in Debian Trixie)
+RUN pip install --no-cache-dir theHarvester
+
+# Install SecLists wordlists (not available as apt package in Debian Trixie)
+RUN git clone --depth 1 https://github.com/danielmiessler/SecLists.git /usr/share/seclists && \
+    rm -rf /usr/share/seclists/.git
 
 # Copy Python packages from py-builder
 COPY --from=py-builder /install /usr/local
