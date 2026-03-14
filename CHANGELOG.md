@@ -2,6 +2,27 @@
 
 All notable changes to Recon Sentinel are documented in this file.
 
+## [1.0.0] — 2026-03-14
+
+### Production Deployment — 11 issues found during first deploy, all fixed
+
+#### Docker Build Fixes
+- **Dockerfile:** Replaced `theharvester` and `seclists` apt packages with `pip install theHarvester` and `git clone SecLists` — packages unavailable in Debian Trixie
+- **Dockerfile:** Added `libpcap-dev` to Go builder stage — naabu requires it at compile time
+- **Dockerfile:** Bumped Go builder from 1.22 → 1.25 — subfinder requires 1.24, gowitness requires 1.25
+- **Dockerfile:** Added `GOTOOLCHAIN=auto` — future-proofs against upstream Go version bumps
+- **requirements.txt:** Downgraded `httpx` from 0.28 → 0.27 — litellm 1.57.x requires httpx < 0.28
+
+#### Database & Migration Fixes
+- **models.py:** Changed `UUID_PK` from shared `mapped_column` object to factory function — SQLAlchemy 2.0 column objects can only bind to one table; reusing across 30 models caused `Column 'id' already assigned to Table 'users'`
+- **0005 migration:** Fixed `down_revision = "0004"` → `"0004_findings_dedup"` — broken Alembic revision chain (KeyError on upgrade)
+- **0002 migration:** Split two `CREATE FUNCTION` statements into separate `op.execute()` calls — asyncpg rejects multi-statement prepared statements
+- **docker-compose.prod.yml:** Changed db-init to apply `schema-v1.2.sql` via `psql` then `alembic stamp head` — no migration 0001 exists to create tables, so incremental upgrade from empty DB was impossible
+
+#### Container Runtime Fixes
+- **docker-compose.prod.yml:** Added `PYTHONPATH: /app` and `user: root` to db-init — alembic couldn't resolve `app.*` imports, and non-root user couldn't read Docker secrets
+- **Host secrets:** Changed `secrets/` permissions from 600 → 644 — Docker Compose (non-Swarm) bind-mounts secrets with host permissions; non-root container user needs read access
+
 ## [1.0.0-rc2] — 2026-03-14
 
 ### R12 Consistency Audit — 14 issues found, all fixed
