@@ -2,6 +2,51 @@
 
 All notable changes to Recon Sentinel are documented in this file.
 
+## [1.0.0-rc1] — 2026-03-14
+
+### Added (R9-R11)
+- **17 scanning agents** (added: BadSecrets, WAF Detection, GitHub Dork, Wayback)
+- **Nuclei DAST fuzzing** for unknown XSS/SQLi/SSRF/SSTI on parameterized endpoints
+- **KEV priority scanning** — CISA Known Exploited Vulnerabilities templates run first
+- **WAF-aware rate adaptation** — 15/30/50 req/s based on WAF Detection Agent results
+- **Per-subdomain vuln scanning** — all discovered hosts scanned, not just root domain
+- **BadSecrets agent** — detects known MachineKeys, Telerik, Flask, Rails, JWT, Symfony secrets
+- **Tiered wordlist system** — profile-sized base + tech-adaptive + sensitive file checks
+- **PDF/HTML report rendering** via reportlab with styled severity tables
+- **CSV export** with formula injection protection and row limits
+- **Single-finding retest** — targeted Nuclei run for post-remediation verification
+- **Finding triage** — verification_status, severity_override, severity_override_reason
+- **Scan profiles** — passive_only, quick, stealth, bounty (fire-and-forget), full (with gates)
+- **Login rate limiting** — 10 attempts/min per IP via Redis sliding window
+- **Global exception handler** — no more stack trace leaks
+- **Health check endpoint** — /api/health verifies DB + Redis, returns 503 when degraded
+- **CORS env var** — CORS_ORIGINS configurable for production
+- **Alembic migration** for triage columns (0005)
+
+### Fixed (R9-R11)
+- **WebSocket event delivery** — Redis subscriber per connection for multi-worker mode
+- **SYS_ADMIN removed** from Docker — Chromium uses --no-sandbox instead
+- **Celery timeouts** — 45min default, 90min for vuln agent (was 30min, killed legit scans)
+- **Worker memory protection** — restart after 50 tasks or 512MB RSS
+- **DB pool sizing** — 10+5 per process (was 40+20, caused pool exhaustion)
+- **Progress updates** — Redis pub/sub only, no DB writes (eliminated ~420 writes/scan)
+- **Telegram SSRF** — routed through _pinned_request for DNS pinning consistency
+- **Command injection** — template_id validated with regex in retest endpoint
+- **CSV injection** — cell sanitization for formula triggers
+- **Input validation** — Literal types on verification_status and severity_override
+
+### Security
+- 93 endpoints with authorization (13 authorize_* helpers)
+- 5 Alembic migrations including RLS policies
+- 11 adversarial review rounds, 100+ issues fixed
+- Cross-reviewed by 4 independent AI reviewers (Claude, Gemini, Grok, ChatGPT)
+
+### Infrastructure
+- Docker: SecLists, GoWitness, badsecrets now installed in image
+- 13 Docker services with resource limits and health checks
+- Container hardening: cap_drop ALL, cap_add NET_RAW only, no SYS_ADMIN
+- 91 tests across 12 suites
+
 ## [0.9.0] — 2026-03-13
 
 ### Added

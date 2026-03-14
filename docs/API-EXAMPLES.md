@@ -195,3 +195,68 @@ curl http://localhost/api/health
 
 - Swagger UI: http://localhost/api/docs
 - ReDoc: http://localhost/api/redoc
+
+## Scan Profiles
+
+```bash
+# Fire-and-forget (no gates, full speed)
+curl -X POST http://localhost/api/v1/scans \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d "{\"target_id\": \"$TARGET_ID\", \"profile\": \"bounty\"}"
+
+# Passive only (OSINT, no active probing)
+curl -X POST http://localhost/api/v1/scans \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d "{\"target_id\": \"$TARGET_ID\", \"profile\": \"passive_only\"}"
+
+# Stealth (no vuln scanning)
+curl -X POST http://localhost/api/v1/scans \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d "{\"target_id\": \"$TARGET_ID\", \"profile\": \"stealth\"}"
+```
+
+## Finding Triage
+
+```bash
+# Confirm a finding
+curl -X PATCH "http://localhost/api/v1/findings/$FINDING_ID" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"verification_status": "confirmed"}'
+
+# Override severity
+curl -X PATCH "http://localhost/api/v1/findings/$FINDING_ID" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"severity_override": "low", "severity_override_reason": "Behind WAF"}'
+
+# Mark false positive
+curl -X PATCH "http://localhost/api/v1/findings/$FINDING_ID" \
+  -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"verification_status": "false_positive"}'
+```
+
+## CSV Export
+
+```bash
+# Export all findings
+curl -s "http://localhost/api/v1/findings/export/csv?scan_id=$SCAN_ID" \
+  -H "$AUTH" -o findings.csv
+
+# Export critical only, excluding false positives
+curl -s "http://localhost/api/v1/findings/export/csv?scan_id=$SCAN_ID&severity=critical&is_false_positive=false" \
+  -H "$AUTH" -o critical.csv
+```
+
+## Single-Finding Retest
+
+```bash
+# Retest after client patches a CVE
+curl -X POST "http://localhost/api/v1/findings/$FINDING_ID/retest" -H "$AUTH"
+# Returns: {"status":"retest_queued","template":"CVE-2024-1234","target":"https://admin.target.com"}
+```
+
+## Health Check
+
+```bash
+curl http://localhost/api/health
+# Returns: {"status":"ok","services":{"postgresql":"ok","redis":"ok"}}
+```

@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white" />
   <img src="https://img.shields.io/badge/license-proprietary-red" />
   <img src="https://img.shields.io/badge/tests-91-green" />
-  <img src="https://img.shields.io/badge/agents-14-orange" />
+  <img src="https://img.shields.io/badge/agents-17-orange" />
   <img src="https://img.shields.io/badge/MITRE_ATT&CK-15_techniques-purple" />
   <img src="https://img.shields.io/badge/review_rounds-8_passed-brightgreen" />
 </p>
@@ -361,20 +361,20 @@ recon-sentinel-repo/
 
 | Metric | Value |
 |--------|-------|
-| Total code lines | 15,820+ |
-| Python lines | 12,400+ |
-| TypeScript lines | 2,800+ |
-| Files | 168 |
-| API endpoints | 91 REST + 2 WebSocket |
-| Database tables | 29 |
+| Total code lines | 16,200+ |
+| Python lines | 13,100+ |
+| TypeScript lines | 3,000+ |
+| Files | 90+ |
+| API endpoints | 93 REST + 2 WebSocket |
+| Database tables | 32 |
 | Frontend views | 12 |
-| Scanning agents | 14 |
+| Scanning agents | 17 |
 | MITRE ATT&CK techniques | 15 |
-| Self-correction patterns | 5 |
+| Self-correction patterns | 11 |
 | Notification channels | 5 (Slack, Discord, Telegram, webhook, email) |
-| Authorization helpers | 13 (covering 91/91 endpoints) |
+| Authorization helpers | 13 (covering 93/93 endpoints) |
 | Tests | 91 |
-| Adversarial review rounds | 8 (80+ issues fixed) |
+| Adversarial review rounds | 11 (100+ issues fixed) |
 
 ---
 

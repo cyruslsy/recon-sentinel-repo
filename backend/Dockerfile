@@ -25,7 +25,8 @@ RUN go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest 
     go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest && \
     go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest && \
     go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest && \
-    go install -v github.com/ffuf/ffuf/v2@latest
+    go install -v github.com/ffuf/ffuf/v2@latest && \
+    go install -v github.com/sensepost/gowitness@latest
 
 # ─── Stage 3: Runtime ────────────────────────────────────────
 FROM python:3.11-slim AS runtime
@@ -37,12 +38,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     nmap \
     dnsutils \
+    openssl \
     chromium \
     theharvester \
+    seclists \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python packages from py-builder
 COPY --from=py-builder /install /usr/local
+
+# Install optional Python scanning libraries
+RUN pip install --no-cache-dir badsecrets 2>/dev/null || true
 
 # Copy Go binaries from go-builder
 COPY --from=go-builder /go/bin/subfinder /usr/local/bin/
@@ -50,6 +56,7 @@ COPY --from=go-builder /go/bin/naabu /usr/local/bin/
 COPY --from=go-builder /go/bin/httpx /usr/local/bin/
 COPY --from=go-builder /go/bin/nuclei /usr/local/bin/
 COPY --from=go-builder /go/bin/ffuf /usr/local/bin/
+COPY --from=go-builder /go/bin/gowitness /usr/local/bin/
 
 # Download Nuclei templates
 RUN nuclei -update-templates 2>/dev/null || true

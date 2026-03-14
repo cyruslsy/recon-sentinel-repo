@@ -65,7 +65,7 @@ backend/app/
 ├── models/        # SQLAlchemy ORM models + enums
 ├── schemas/       # Pydantic request/response schemas
 ├── api/           # FastAPI route handlers (15 modules)
-├── agents/        # 13 scanning agents + base class + evasion + corrections
+├── agents/        # 17 scanning agents + base class + evasion + corrections
 └── tasks/         # Celery tasks: orchestrator, reports, diff, notifications
 ```
 

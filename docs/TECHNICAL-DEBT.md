@@ -1,151 +1,66 @@
 # Recon Sentinel — Outstanding Technical Debt
 
-**Last Updated:** March 13, 2026 (after Round 6 adversarial review — all P0/P1/P2 fixes applied)
+**Last Updated:** March 14, 2026 (after Round 11 — cross-reviewer consensus fixes applied)
 
-**Current State:** 168 files, ~15,800 lines, 91 tests, 0 TODOs
+**Current State:** 68 Python files, ~13,200 lines backend, 91 tests, 17 agents, 93 endpoints
 
-**Review Rounds:** 6 adversarial reviews, 80+ issues fixed
-
----
-
-## ~~P0: Systemic IDOR — 23 Endpoints~~ ✅ FIXED (R5+R6)
-
-All 23 IDOR endpoints patched. 13 `authorize_*` helpers in `authorization.py` (197 lines). R6 caught final 2 gaps: `update_channel` and `test_notification`.
-
-## ~~P0: R6 SyntaxErrors — API Cannot Start~~ ✅ FIXED
-
-1. auth.py: Interleaved import → moved `tz` import before auth block
-2. reports.py: Orphaned raise in download_report → deleted
-3. targets.py: Orphaned raises (2×) → deleted
-4. notifications.py (task): Over-indented response handling (4× senders) → de-indented
-
-## ~~P0: Missing asyncio Import~~ ✅ FIXED
-
-threat_intel.py → added `import asyncio` to module-level imports
-
-## ~~P0: Frontend Runtime Crashes (5 Pages)~~ ✅ FIXED
-
-All 5 pages: added `useState(true)` declarations, moved `setLoading(false)` to `finally` blocks.
+**Review Rounds:** 11 adversarial reviews, 100+ issues identified and fixed
 
 ---
 
-## ~~P1: Security — Unscoped List Endpoints~~ ✅ FIXED
+## Resolved (All Previous Rounds)
 
-- reports.py `list_reports` → scoped via ProjectMember subquery
-- chat.py `list_sessions` → filtered by `user_id`
+All P0, P1, and P2 issues from Rounds 1-11 are resolved:
 
-## ~~P1: SSRF DNS Rebinding TOCTOU~~ ✅ FIXED
-
-New `_pinned_request` helper pins resolved IP with Host header. Applied to Slack, Discord, webhook senders.
-
-## ~~P1: Redis Password Mismatch~~ ✅ FIXED
-
-docker-compose.prod.yml healthcheck uses `${REDIS_PASSWORD:-sentinel-redis-secret}`.
-
-## ~~P1: Chat WebSocket Auth~~ ✅ ALREADY FIXED (pre-R6)
-
-Has token type check, JTI blacklist, user exists/is_active.
-
-## ~~P1: Scan WebSocket Bare Exception~~ ✅ ALREADY FIXED (pre-R6)
-
-Returns code 4011 with "Authorization check failed — please retry".
-
-## ~~P1: Raw fetch() in history/page.tsx~~ ✅ ALREADY FIXED (pre-R6)
-
-Uses `api.*` methods throughout.
-
-## ~~P1: MITRE Tags Hardcoded~~ ✅ FIXED
-
-agents/page.tsx: replaced ternary chain with `agent.mitre_tags?.[0]`; added `mitre_tags` to TS interface.
-
-## ~~P1: No Skip-to-Content Link~~ ✅ FIXED
-
-AppLayout.tsx: added sr-only skip link targeting `#main-content`.
-
-## ~~P1: Color-Only Status Encoding~~ ✅ FIXED
-
-agents/page.tsx: added status icons (✓, ●, ✗, ⟳, ❚❚). findings/page.tsx: added severity icons (▲, ◆, ●, ○, —).
+- **R5:** 21 IDOR endpoints → 13 authorize_* helpers, 93/93 endpoints covered
+- **R6:** 6 SyntaxErrors, 5 frontend crashes, SSRF TOCTOU → all fixed
+- **R7:** 8 P1 list-endpoint scoping gaps → all scoped
+- **R8:** Last 2 IDORs (launch_scan, list_scans) → closed
+- **R10:** Command injection in retest, CSV injection, input validation → fixed
+- **R11:** WebSocket multi-worker delivery, SYS_ADMIN removal, Celery timeouts → fixed
+- **Cross-review:** Telegram DNS pinning, bounty profile, DB pool sizing → fixed
 
 ---
 
-## ~~P2: ALLOWED_AGENT_TYPES Location~~ ✅ FIXED
+## Remaining: Pre-Production Items
 
-Moved from inside `_run_vuln()` to module-level constant in orchestrator.py.
+### P0 — Must Fix Before Any Real Deployment
 
-## ~~P2: Global Timeout Reset on Resume~~ ✅ FIXED
+| Item | Description | Effort |
+|------|-------------|--------|
+| Cross-tenant isolation tests | Zero tests verify User B can't access User A's data | 2 days |
+| PostgreSQL test fixtures | All 91 tests run against SQLite — RLS untested in CI | 1 day |
 
-orchestrator.py now parses `state.started_at` instead of `utc_now()`.
+### P1 — Must Fix Before Multi-Tenant / SaaS
 
-## ~~P2: Redundant session.close()~~ ✅ ALREADY CLEAN
+| Item | Description | Effort |
+|------|-------------|--------|
+| Frontend DOMPurify | Tool output needs client-side sanitization | 2 hours |
+| WebSocket auth tests | No test for WS rejecting unauthorized users | 1 day |
+| SOCKS5/HTTP proxy routing | OPSEC gap for red team engagements | 3 days |
+| Scope attestation | No RoE document upload linked to project | 2 days |
+| TLS end-to-end | Nginx TLS commented out, no cert provisioning | 1 day |
 
-Context manager handles close; no explicit `.close()` present.
+### P2 — Should Fix Before v1.1
 
-## ~~P2: list_engines Unscoped~~ ✅ FIXED
-
-settings.py: returns user's own engines + defaults; admins see all.
-
-## ~~P2: Gate "Customize" Button No-Op~~ ✅ FIXED
-
-agents/page.tsx: added collapsible textarea panel for scope modifications.
-
-## ~~P2: Report Generation Feedback~~ ✅ FIXED
-
-reports/page.tsx: replaced single 3s setTimeout with polling (5s intervals, 12 attempts).
-
-## ~~P2: Sidebar Badge No-Op~~ ✅ FIXED
-
-Sidebar.tsx: polls `api.listScans()` every 30s, shows running scan count.
-
-## ~~P2: Sidebar Cognitive Load~~ ✅ FIXED
-
-Sidebar.tsx: grouped 12 items into 4 labeled sections (Dashboard, Scanning, Results, Tools).
-
-## ~~P2: AI Diff Summary Plain Text~~ ✅ FIXED
-
-history/page.tsx: renders with basic markdown (bold, bullets, newlines via dangerouslySetInnerHTML).
-
-## ~~P2: Timeline Emoji A11y~~ ✅ FIXED
-
-health/page.tsx: added `aria-label`, `role="img"`, sr-only text labels on timeline dots.
-
-## ~~P2: No Focus-Visible Styles~~ ✅ FIXED
-
-globals.css: added `*:focus-visible` outline, `:focus:not(:focus-visible)` reset, `.sr-only` utility.
+| Item | Description | Effort |
+|------|-------------|--------|
+| Subscan endpoint | Can't target individual subdomains | 2 days |
+| Data retention policy | Scan data accumulates indefinitely | 1 day |
+| Monitoring (Prometheus/Grafana) | No alerts on failures/pool exhaustion | 2 days |
+| Negative authorization tests | No test operator can't do admin actions | 1 day |
 
 ---
 
-## Additional Self-Review Fixes
+## Architecture Score History
 
-- organizations.py: eliminated redundant `db.get()` after `authorize_org()`
-- projects.py: eliminated redundant `db.get()` after `authorize_project()`
-- Frontend: all `setLoading(false)` moved to `finally` blocks (prevents stuck spinners)
-- SMTP Fernet key coupling remains a known architectural note (JWT secret rotation would break SMTP decryption)
-
----
-
-## Remaining: Test Coverage Gaps
-
-| Missing Test | Priority | Description |
-|-------------|----------|-------------|
-| Cross-tenant isolation | P0 | User B cannot access User A's scans/findings/reports/credentials |
-| WebSocket auth | P1 | Scan WS rejects wrong user, chat WS rejects revoked tokens |
-| IDOR enumeration | P1 | Sequential UUID guessing returns 403 not 404 |
-| RLS enforcement | P1 | Tests against PostgreSQL (not SQLite) |
-| Negative authorization | P1 | Operator can't do admin actions, viewer can't mutate |
-
----
-
-## Recommended Pre-Deploy Gate
-
-1. Backend: `python -c "from app.main import app"` — catches import-time SyntaxErrors
-2. Backend: `python -m pytest tests/ -x --timeout=30` — fast smoke test
-3. Frontend: `npx tsc --noEmit` — catches TypeScript errors
-4. Verify: `grep -rn "raise HTTPException" backend/app/api/ | grep -B1 "authorize_"` — catch orphaned raises
-
----
-
-## Summary
-
-**All P0, P1, and P2 issues from Round 6 review are resolved.** Zero open code/security/UI debt items remain. The only outstanding work is adding test coverage (cross-tenant isolation, WebSocket auth, IDOR enumeration, RLS enforcement, negative authorization).
-
-**Architecture score: 8/10. Implementation completeness: ~95%. Security hardening: ~90%.**
+| Round | Score | Key Change |
+|-------|-------|------------|
+| R4 | 7.3 | 4 P0 blockers |
+| R5 | 6.8 | 21 IDOR discovered |
+| R6 | 7.3 | All IDORs fixed |
+| R7 | 7.7 | List-endpoint scoping |
+| R8 | 8.2 | Last IDORs closed |
+| R9 | 8.6 | Zero P1 findings |
+| R10 | 8.5 | New features introduced new issues |
+| R11 | 8.5 | Cross-reviewer consensus fixes applied |
