@@ -18,7 +18,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ─── Stage 2: Go Tool Builder ────────────────────────────────
-FROM golang:1.22-bookworm AS go-builder
+FROM golang:1.24-bookworm AS go-builder
+
+# naabu requires libpcap-dev for packet capture support
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpcap-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # ProjectDiscovery tools
 RUN go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest && \
