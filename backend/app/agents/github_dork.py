@@ -70,16 +70,70 @@ class GitHubDorkAgent(BaseAgent):
         if not github_token:
             logger.warning("No GitHub token configured — using unauthenticated search (rate-limited)")
 
-        await self.report_progress(5, "Starting GitHub code search...")
+        await self.report_progress(3, "Loading tech context from previous agents...")
+
+        # Build tech-adaptive dork list
+        from app.agents.tech_context import get_scan_tech_context
+        from app.models.enums import FindingSeverity as FS
+        tech_ctx = await get_scan_tech_context(self.scan_id)
+
+        SEVERITY_MAP = {"CRITICAL": FS.CRITICAL, "HIGH": FS.HIGH, "MEDIUM": FS.MEDIUM, "LOW": FS.LOW, "INFO": FS.INFO}
+
+        # ─── Tiered execution: prioritize high-value dorks ──────────
+        # Tier 1: Base dorks (always run — 20 queries, proven value)
+        # Tier 2: Tech-detected dorks (only for matched stacks — high precision)
+        # Tier 3: Always-check dorks (CRITICAL severity only — broad sweep)
+        # Budget: stop at MAX_DORKS to respect rate limits
+
+        MAX_DORKS = 40 if github_token else 25  # Stay within rate limit budget
+
+        # Tier 1: base dorks
+        tier1 = list(DORK_TEMPLATES)
+
+        # Tier 2: dorks from stacks matched by actual detected tech (high precision)
+        tier2 = []
+        for stack_name in tech_ctx.matched_stacks:
+            stack = tech_ctx._get_stack(stack_name)
+            for template, dtype, sev_str in stack.get("github_dorks", []):
+                tier2.append((template, dtype, SEVERITY_MAP.get(sev_str, FS.HIGH)))
+
+        # Tier 3: CRITICAL-only dorks from always-check stacks (broad sweep)
+        tier3 = []
+        for stack_name in tech_ctx.always_check:
+            if stack_name in tech_ctx.matched_stacks:
+                continue  # already in tier 2
+            stack = tech_ctx._get_stack(stack_name)
+            for template, dtype, sev_str in stack.get("github_dorks", []):
+                if sev_str == "CRITICAL":
+                    tier3.append((template, dtype, FS.CRITICAL))
+
+        # Merge tiers, deduplicate, cap at budget
+        seen = set()
+        prioritized_dorks = []
+        for dork in tier1 + tier2 + tier3:
+            if dork[0] not in seen:
+                seen.add(dork[0])
+                prioritized_dorks.append(dork)
+            if len(prioritized_dorks) >= MAX_DORKS:
+                break
+
+        logger.info(
+            f"GitHub dorking {target}: tier1={len(tier1)} base, "
+            f"tier2={len(tier2)} detected, tier3={len(tier3)} sweep → "
+            f"{len(prioritized_dorks)} total (budget: {MAX_DORKS})"
+        )
+
+        await self.report_progress(5, f"Searching {len(prioritized_dorks)} dork patterns...")
 
         headers = {"Accept": "application/vnd.github.v3+json"}
         if github_token:
             headers["Authorization"] = f"token {github_token}"
 
+        rate_limit_hits = 0
         async with httpx.AsyncClient(timeout=15, headers=headers) as client:
-            for i, (dork_template, dork_type, base_severity) in enumerate(DORK_TEMPLATES):
+            for i, (dork_template, dork_type, base_severity) in enumerate(prioritized_dorks):
                 query = dork_template.replace("{domain}", target)
-                pct = 5 + int((i / len(DORK_TEMPLATES)) * 85)
+                pct = 5 + int((i / len(prioritized_dorks)) * 85)
                 await self.report_progress(pct, f"Searching: {dork_type}...")
 
                 try:
@@ -89,8 +143,16 @@ class GitHubDorkAgent(BaseAgent):
                     )
 
                     if resp.status_code == 403:
-                        logger.warning("GitHub rate limited — pausing dorks")
-                        break
+                        rate_limit_hits += 1
+                        if rate_limit_hits >= 3:
+                            logger.warning("GitHub rate limited 3x — stopping dorks")
+                            break
+                        # Back off and retry once instead of immediately giving up
+                        retry_after = int(resp.headers.get("Retry-After", "60"))
+                        wait = min(retry_after, 65)
+                        logger.warning(f"GitHub rate limited — waiting {wait}s ({rate_limit_hits}/3)")
+                        await asyncio.sleep(wait)
+                        continue
                     if resp.status_code != 200:
                         continue
 

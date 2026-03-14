@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useState, useEffect } from "react";
 import { api } from "@/lib/api";
-import ScanSelector from "@/components/ScanSelector";
 
 interface NavItem {
   href: string;
@@ -81,9 +80,6 @@ export default function Sidebar() {
         </h1>
         <p className="text-xs text-sentinel-muted mt-0.5">AI-Powered Recon</p>
       </div>
-
-      {/* Active Scan Selector */}
-      <ScanSelector />
 
       {/* Navigation */}
       <nav aria-label="Main navigation" className="flex-1 py-2 overflow-y-auto">

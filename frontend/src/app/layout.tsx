@@ -1,6 +1,5 @@
 import "@/styles/globals.css";
 import { AuthProvider } from "@/lib/auth";
-import { ScanProvider } from "@/lib/scan-context";
 
 export const metadata = {
   title: "Recon Sentinel",
@@ -11,9 +10,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <body className="bg-sentinel-bg text-sentinel-text min-h-screen">
-        <AuthProvider>
-          <ScanProvider>{children}</ScanProvider>
-        </AuthProvider>
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );

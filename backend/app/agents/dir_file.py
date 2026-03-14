@@ -266,6 +266,15 @@ class DirFileAgent(BaseAgent):
         for path in SENSITIVE_PATHS:
             words.add(path)
 
+        # Tier 3b: Tech-context sensitive paths (from detected stack)
+        from app.agents.tech_context import get_scan_tech_context
+        tech_ctx = await get_scan_tech_context(self.scan_id)
+        tech_paths = tech_ctx.get_sensitive_paths()
+        for path in tech_paths:
+            words.add(path)
+        if tech_paths:
+            logger.info(f"Tech-context: +{len(tech_paths)} sensitive paths from stacks: {tech_ctx.all_active_stacks}")
+
         # Tier 4: Custom user wordlists from config
         custom_lists = self.config.get("custom_wordlists", [])
         for custom_path in custom_lists:

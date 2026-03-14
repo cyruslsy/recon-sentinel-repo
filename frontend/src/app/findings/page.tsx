@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import AppLayout from "@/components/AppLayout";
-import SafeHtml, { sanitizeText } from "@/components/SafeHtml";
 import { api } from "@/lib/api";
 import type { Finding, FindingSeverity } from "@/lib/types";
 
@@ -127,13 +126,13 @@ function FindingDetail({
           {/* Value */}
           <div>
             <p className="text-[10px] uppercase text-sentinel-muted tracking-wider mb-1">Value</p>
-            <SafeHtml html={finding.value} as="p" className="text-sm font-mono break-all bg-sentinel-bg rounded p-2 border border-sentinel-border" />
+            <p className="text-sm font-mono break-all bg-sentinel-bg rounded p-2 border border-sentinel-border">{finding.value}</p>
           </div>
 
           {/* Detail / Evidence */}
           <div>
             <p className="text-[10px] uppercase text-sentinel-muted tracking-wider mb-1">Detail / Evidence</p>
-            <SafeHtml html={finding.detail} as="p" className="text-sm text-sentinel-text/90 whitespace-pre-wrap" />
+            <p className="text-sm text-sentinel-text/90 whitespace-pre-wrap">{finding.detail}</p>
           </div>
 
           {/* Metadata */}

@@ -109,6 +109,12 @@ class JSAnalysisAgent(BaseAgent):
         from app.agents.evasion import random_ua
         findings = []
 
+        # Load tech context for adaptive secret patterns
+        from app.agents.tech_context import get_scan_tech_context
+        tech_ctx = await get_scan_tech_context(self.scan_id)
+        self._tech_js_patterns = tech_ctx.get_js_patterns()
+        logger.info(f"JS Analysis: {len(self._tech_js_patterns)} extra tech-aware patterns loaded")
+
         # ─── Phase 1: Get live hosts from active phase ────────
         await self.report_progress(5, "Getting live web hosts...")
         hosts = await self._get_live_hosts()
@@ -230,11 +236,22 @@ class JSAnalysisAgent(BaseAgent):
     # ─── Secret Scanning ──────────────────────────────────────
 
     def _scan_for_secrets(self, js_content: str, source_url: str) -> list[dict]:
-        """Scan JS content for hardcoded secrets."""
+        """Scan JS content for hardcoded secrets. Uses static patterns + tech-adaptive patterns."""
         findings = []
         seen = set()
 
-        for pattern_name, config in SECRET_PATTERNS.items():
+        # Merge static patterns with tech-aware patterns
+        all_patterns = dict(SECRET_PATTERNS)
+        if hasattr(self, '_tech_js_patterns'):
+            for name, regex in self._tech_js_patterns.items():
+                if name not in all_patterns:
+                    all_patterns[name] = {
+                        "regex": regex,
+                        "severity": FindingSeverity.HIGH,
+                        "description": f"Tech-detected: {name.replace('_', ' ').title()}",
+                    }
+
+        for pattern_name, config in all_patterns.items():
             for match in re.finditer(config["regex"], js_content):
                 matched_value = match.group(0)[:80]  # Truncate for safety
 
