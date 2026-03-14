@@ -66,6 +66,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://sentinel:@postgres:5432/recon_sentinel
       DB_PASSWORD_FILE: /run/secrets/db_password
+      PYTHONPATH: /app
     secrets:
       - db_password
     depends_on:
@@ -201,10 +202,9 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # Mount TLS certs in production:
-      # - ./certs/fullchain.pem:/etc/nginx/ssl/cert.pem:ro
-      # - ./certs/privkey.pem:/etc/nginx/ssl/key.pem:ro
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl/cert.pem:/etc/nginx/ssl/cert.pem:ro
+      - ./nginx/ssl/key.pem:/etc/nginx/ssl/key.pem:ro
     depends_on:
       api:
         condition: service_healthy
