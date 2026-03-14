@@ -22,8 +22,8 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
   const [expanded, setExpanded] = useState(false);
   const [rerunning, setRerunning] = useState(false);
   const data = wsData || agent;
-  const pct = data.progress_pct || 0;
-  const status = data.status || agent.status;
+  const pct = Number(data.progress_pct || 0);
+  const status = String(data.status || agent.status);
 
   const statusColor =
     status === "completed" ? "text-sentinel-green" :
@@ -92,10 +92,10 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
 
       <div className="flex items-center justify-between mt-2">
         <span className="text-xs text-sentinel-muted">
-          {pct}% {data.current_tool ? `· ${data.current_tool}` : ""}
+          {pct}% {data.current_tool ? `· ${String(data.current_tool)}` : ""}
         </span>
         <span className="text-xs text-sentinel-muted">
-          {data.findings_count || agent.findings_count || 0} findings
+          {Number(data.findings_count || agent.findings_count || 0)} findings
           {agent.duration_seconds ? ` · ${Math.round(agent.duration_seconds)}s` : ""}
         </span>
       </div>
@@ -109,7 +109,7 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
 
       {data.last_log_line && (
         <p className="text-[11px] text-sentinel-muted mt-2 font-mono truncate">
-          {data.last_log_line}
+          {String(data.last_log_line)}
         </p>
       )}
 
@@ -120,7 +120,7 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
           {data.last_log_line && (
             <div className="p-2 bg-sentinel-bg rounded border border-sentinel-border">
               <p className="text-[10px] text-sentinel-muted mb-1">LAST COMMAND</p>
-              <p className="text-xs font-mono text-sentinel-text/80 break-all">{data.last_log_line}</p>
+              <p className="text-xs font-mono text-sentinel-text/80 break-all">{String(data.last_log_line)}</p>
             </div>
           )}
 
