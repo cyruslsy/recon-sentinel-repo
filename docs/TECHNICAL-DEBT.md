@@ -1,16 +1,16 @@
 # Recon Sentinel — Outstanding Technical Debt
 
-**Last Updated:** March 14, 2026 (after UI redesign + schema sync v1.2)
+**Last Updated:** March 14, 2026 (after R12 consistency audit + schema v1.2 sync)
 
-**Current State:** 86 files (63 Python + 23 TypeScript), ~17,000 lines, 91 tests, 17 agents, 93 endpoints, 14 frontend views, 6 Alembic migrations, 32 database tables
+**Current State:** 87 files (64 Python + 23 TypeScript), ~17,200 lines, 91 tests, 17 agents, 93 endpoints, 14 frontend views, 7 Alembic migrations, 32 database tables
 
-**Review Rounds:** 11 adversarial reviews, 100+ issues identified and fixed
+**Review Rounds:** 12 adversarial reviews, 114+ issues identified and fixed
 
 ---
 
 ## Resolved (All Previous Rounds)
 
-All P0, P1, and P2 issues from Rounds 1-11 are resolved:
+All P0, P1, and P2 issues from Rounds 1-12 are resolved:
 
 - **R5:** 21 IDOR endpoints → 13 authorize_* helpers, 93/93 endpoints covered
 - **R6:** 6 SyntaxErrors, 5 frontend crashes, SSRF TOCTOU → all fixed
@@ -21,6 +21,7 @@ All P0, P1, and P2 issues from Rounds 1-11 are resolved:
 - **Cross-review:** Telegram DNS pinning, bounty profile, DB pool sizing → fixed
 - **Schema sync v1.2:** 13 enum/model/schema bugs fixed, ScanStatus.ERROR→FAILED, ScanStatus.QUEUED→PENDING, AgentRun.target_host/celery_task_id added, Finding.value expanded, ScanPhase.REPLAN added, migration 0006
 - **UI redesign:** 44 items from design review implemented — finding detail panel, health feed chains, MITRE technique names, dashboard donut, targets page, sorting/pagination, skeleton loaders, empty states
+- **R12 consistency audit:** 14 issues found (5 P0, 5 P1, 4 P2/P3), all fixed — ScopeViolation.project_id crash, AuditLog.detail crash, ApiKey.created_by missing, Scan.error_message missing, agent list schema mismatch, agent_type.value on string crash, frontend corrected_params phantom, ScanDiffItem.value drift, stale docstring/comment, scope added_by. Migration 0007 added. Schema DDL updated to v1.2. Patch files cleaned up.
 
 ---
 
