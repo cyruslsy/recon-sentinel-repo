@@ -17,7 +17,7 @@ import sqlalchemy as sa
 
 # revision identifiers
 revision = "0005"
-down_revision = "0004"
+down_revision = "0004_findings_dedup"
 branch_labels = None
 depends_on = None
 
