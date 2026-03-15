@@ -15,6 +15,10 @@
       "Bash(pip install *)",
       "Bash(npm *)",
       "Bash(alembic *)",
+      "Bash(cd *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
       "Edit(backend/**)",
       "Edit(frontend/**)",
       "Edit(tests/**)",
@@ -23,24 +27,28 @@
       "Edit(REVIEW.md)",
       "Edit(.claude/**)",
       "Edit(docker-compose*)",
-      "Edit(Dockerfile)"
+      "Write(backend/**)",
+      "Write(frontend/**)",
+      "Write(tests/**)",
+      "Write(docs/**)"
     ],
     "deny": [
       "Edit(secrets/**)",
       "Edit(.env)",
-      "Bash(rm -rf /)"
+      "Write(secrets/**)"
     ]
   },
   "hooks": {
-    "afterEdit": [
+    "PostToolUse": [
       {
-        "pattern": "backend/**/*.py",
-        "command": "cd backend && python -m py_compile ${file} 2>&1 || true"
-      }
-    ],
-    "preCommit": [
-      {
-        "command": "cd backend && python -m pytest tests/ -x -q --tb=line 2>&1 | tail -5"
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'INPUT=$(cat); FILE=$(echo \"$INPUT\" | jq -r \".tool_input.file_path // empty\"); if [[ \"$FILE\" == *.py ]]; then python3 -m py_compile \"$FILE\" 2>&1 || true; fi'",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }
