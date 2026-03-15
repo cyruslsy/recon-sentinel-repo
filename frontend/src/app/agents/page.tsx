@@ -22,8 +22,8 @@ function AgentCard({ agent, wsData }: { agent: AgentRun; wsData?: Record<string,
   const [expanded, setExpanded] = useState(false);
   const [rerunning, setRerunning] = useState(false);
   const data = wsData || agent;
-  const pct = Number(data.progress_pct || 0);
-  const status = String(data.status || agent.status);
+  const pct: number = Number(data.progress_pct || 0);
+  const status: string = String(data.status || agent.status);
 
   const statusColor =
     status === "completed" ? "text-sentinel-green" :

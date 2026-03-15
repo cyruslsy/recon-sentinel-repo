@@ -435,6 +435,7 @@ class ReportResponse(SentinelBase):
     format: ReportFormat
     company_name: Optional[str] = None
     report_title: Optional[str] = None
+    file_path: str
     file_size_bytes: Optional[int] = None
     generated_at: datetime
 

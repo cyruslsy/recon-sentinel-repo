@@ -9,7 +9,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tz import utc_now
@@ -19,6 +19,7 @@ from app.core.auth import (
 )
 from app.core.database import get_db
 from app.core.redis import blacklist_all_user_tokens
+from app.models.enums import UserRole
 from app.models.models import User
 
 router = APIRouter()
@@ -53,18 +54,32 @@ class UserProfileResponse(BaseModel):
         from_attributes = True
 
 
+@router.get("/setup-status")
+async def setup_status(db: AsyncSession = Depends(get_db)):
+    """Check if the platform needs initial setup (no users exist yet)."""
+    result = await db.execute(select(func.count()).select_from(User))
+    return {"needs_setup": result.scalar() == 0}
+
+
 @router.post("/register", response_model=TokenResponse, status_code=201)
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == data.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email already registered")
+
+    # First registered user becomes admin — ensures the platform is usable
+    # without needing direct DB access or the CLI script.
+    user_count = await db.execute(select(func.count()).select_from(User))
+    is_first_user = user_count.scalar() == 0
+
     user = User(
         email=data.email,
         password_hash=hash_password(data.password),
         display_name=data.display_name,
+        role=UserRole.ADMIN if is_first_user else UserRole.TESTER,
     )
     db.add(user)
-    await db.commit()
+    await db.flush()
     await db.refresh(user)
     from app.core.config import get_settings
     s = get_settings()

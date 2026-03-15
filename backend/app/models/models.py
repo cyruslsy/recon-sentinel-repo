@@ -47,7 +47,7 @@ class User(Base, TimestampMixin):
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role", create_type=False), default=UserRole.TESTER
+        Enum(UserRole, name="user_role", create_type=False, values_callable=lambda e: [x.value for x in e]), default=UserRole.TESTER
     )
     api_key_hash: Mapped[Optional[str]] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -103,7 +103,7 @@ class ProjectMember(Base):
     id: Mapped[uuid.UUID] = UUID_PK()
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role", create_type=False), default=UserRole.TESTER)
+    role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role", create_type=False, values_callable=lambda e: [x.value for x in e]), default=UserRole.TESTER)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     project: Mapped["Project"] = relationship(back_populates="members")
@@ -122,7 +122,7 @@ class Target(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = UUID_PK()
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     target_value: Mapped[str] = mapped_column(String(500), nullable=False)
-    input_type: Mapped[InputType] = mapped_column(Enum(InputType, name="input_type", create_type=False), nullable=False)
+    input_type: Mapped[InputType] = mapped_column(Enum(InputType, name="input_type", create_type=False, values_callable=lambda e: [x.value for x in e]), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
 
     # Target context panel data (cached WHOIS/DNS)
@@ -152,9 +152,9 @@ class ScopeDefinition(Base):
 
     id: Mapped[uuid.UUID] = UUID_PK()
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
-    item_type: Mapped[ScopeItemType] = mapped_column(Enum(ScopeItemType, name="scope_item_type", create_type=False), nullable=False)
+    item_type: Mapped[ScopeItemType] = mapped_column(Enum(ScopeItemType, name="scope_item_type", create_type=False, values_callable=lambda e: [x.value for x in e]), nullable=False)
     item_value: Mapped[str] = mapped_column(String(500), nullable=False)
-    status: Mapped[ScopeStatus] = mapped_column(Enum(ScopeStatus, name="scope_status", create_type=False), default=ScopeStatus.IN_SCOPE)
+    status: Mapped[ScopeStatus] = mapped_column(Enum(ScopeStatus, name="scope_status", create_type=False, values_callable=lambda e: [x.value for x in e]), default=ScopeStatus.IN_SCOPE)
     note: Mapped[Optional[str]] = mapped_column(Text)
     auto_detected: Mapped[bool] = mapped_column(Boolean, default=False)
     added_by: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
@@ -192,7 +192,7 @@ class ScanEngine(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = UUID_PK()
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
-    profile: Mapped[ScanProfile] = mapped_column(Enum(ScanProfile, name="scan_profile", create_type=False), default=ScanProfile.CUSTOM)
+    profile: Mapped[ScanProfile] = mapped_column(Enum(ScanProfile, name="scan_profile", create_type=False, values_callable=lambda e: [x.value for x in e]), default=ScanProfile.CUSTOM)
     config_yaml: Mapped[str] = mapped_column(Text, nullable=False)
     config_json: Mapped[Optional[dict]] = mapped_column(JSONB)  # FIX #11: parsed YAML
     agent_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -206,9 +206,9 @@ class Scan(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = UUID_PK()
     target_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("targets.id", ondelete="CASCADE"), nullable=False)
     engine_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("scan_engines.id"))
-    profile: Mapped[ScanProfile] = mapped_column(Enum(ScanProfile, name="scan_profile", create_type=False), default=ScanProfile.FULL)
-    status: Mapped[ScanStatus] = mapped_column(Enum(ScanStatus, name="scan_status", create_type=False), default=ScanStatus.PENDING)
-    phase: Mapped[ScanPhase] = mapped_column(Enum(ScanPhase, name="scan_phase", create_type=False), default=ScanPhase.PASSIVE)
+    profile: Mapped[ScanProfile] = mapped_column(Enum(ScanProfile, name="scan_profile", create_type=False, values_callable=lambda e: [x.value for x in e]), default=ScanProfile.FULL)
+    status: Mapped[ScanStatus] = mapped_column(Enum(ScanStatus, name="scan_status", create_type=False, values_callable=lambda e: [x.value for x in e]), default=ScanStatus.PENDING)
+    phase: Mapped[ScanPhase] = mapped_column(Enum(ScanPhase, name="scan_phase", create_type=False, values_callable=lambda e: [x.value for x in e]), default=ScanPhase.PASSIVE)
     langgraph_checkpoint: Mapped[Optional[dict]] = mapped_column(JSONB)
 
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
@@ -244,7 +244,7 @@ class Scan(Base, TimestampMixin):
     # Relationships
     target: Mapped["Target"] = relationship(back_populates="scans")
     agent_runs: Mapped[list["AgentRun"]] = relationship(back_populates="scan", cascade="all, delete-orphan")
-    findings: Mapped[list["Finding"]] = relationship(back_populates="scan", cascade="all, delete-orphan")
+    findings: Mapped[list["Finding"]] = relationship(back_populates="scan", cascade="all, delete-orphan", foreign_keys="[Finding.scan_id]")
     approval_gates: Mapped[list["ApprovalGate"]] = relationship(back_populates="scan", cascade="all, delete-orphan")
     health_events: Mapped[list["HealthEvent"]] = relationship(back_populates="scan", cascade="all, delete-orphan")
 
@@ -266,7 +266,7 @@ class ApprovalGate(Base):
     ai_summary: Mapped[str] = mapped_column(Text, nullable=False)
     ai_recommendation: Mapped[dict] = mapped_column(JSONB, nullable=False)
     decision: Mapped[ApprovalDecision] = mapped_column(
-        Enum(ApprovalDecision, name="approval_decision", create_type=False), default=ApprovalDecision.PENDING
+        Enum(ApprovalDecision, name="approval_decision", create_type=False, values_callable=lambda e: [x.value for x in e]), default=ApprovalDecision.PENDING
     )
     user_modifications: Mapped[Optional[dict]] = mapped_column(JSONB)
     decided_by: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
@@ -296,9 +296,9 @@ class AgentRun(Base, TimestampMixin):
     agent_type: Mapped[str] = mapped_column(String(100), nullable=False)
     agent_name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[AgentStatus] = mapped_column(
-        Enum(AgentStatus, name="agent_status", create_type=False), default=AgentStatus.PENDING
+        Enum(AgentStatus, name="agent_status", create_type=False, values_callable=lambda e: [x.value for x in e]), default=AgentStatus.PENDING
     )
-    phase: Mapped[ScanPhase] = mapped_column(Enum(ScanPhase, name="scan_phase", create_type=False), nullable=False)
+    phase: Mapped[ScanPhase] = mapped_column(Enum(ScanPhase, name="scan_phase", create_type=False, values_callable=lambda e: [x.value for x in e]), nullable=False)
     progress_pct: Mapped[int] = mapped_column(Integer, default=0)
     current_tool: Mapped[Optional[str]] = mapped_column(String(255))
     eta_seconds: Mapped[Optional[int]] = mapped_column(Integer)
@@ -333,7 +333,7 @@ class HealthEvent(Base):
     agent_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     event_type: Mapped[HealthEventType] = mapped_column(
-        Enum(HealthEventType, name="health_event_type", create_type=False), nullable=False
+        Enum(HealthEventType, name="health_event_type", create_type=False, values_callable=lambda e: [x.value for x in e]), nullable=False
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     detail: Mapped[str] = mapped_column(Text, nullable=False)
@@ -366,10 +366,10 @@ class Finding(Base, TimestampMixin):
     agent_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
 
     finding_type: Mapped[FindingType] = mapped_column(
-        Enum(FindingType, name="finding_type_enum", create_type=False), nullable=False
+        Enum(FindingType, name="finding_type_enum", create_type=False, values_callable=lambda e: [x.value for x in e]), nullable=False
     )
     severity: Mapped[FindingSeverity] = mapped_column(
-        Enum(FindingSeverity, name="finding_severity", create_type=False), nullable=False
+        Enum(FindingSeverity, name="finding_severity", create_type=False, values_callable=lambda e: [x.value for x in e]), nullable=False
     )
     confidence: Mapped[Optional[int]] = mapped_column(Integer)
     value: Mapped[str] = mapped_column(String(2000), nullable=False)
@@ -452,7 +452,7 @@ class MitreFindingCount(Base):
     high_count: Mapped[int] = mapped_column(Integer, default=0)
     medium_count: Mapped[int] = mapped_column(Integer, default=0)
     max_severity: Mapped[Optional[FindingSeverity]] = mapped_column(
-        Enum(FindingSeverity, name="finding_severity", create_type=False)
+        Enum(FindingSeverity, name="finding_severity", create_type=False, values_callable=lambda e: [x.value for x in e])
     )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -512,7 +512,7 @@ class Vulnerability(Base):
     finding_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("findings.id", ondelete="CASCADE"), nullable=False)
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
     severity: Mapped[FindingSeverity] = mapped_column(
-        Enum(FindingSeverity, name="finding_severity", create_type=False), nullable=False
+        Enum(FindingSeverity, name="finding_severity", create_type=False, values_callable=lambda e: [x.value for x in e]), nullable=False
     )  # FIX #2: denormalized
     host: Mapped[str] = mapped_column(String(500), nullable=False)
     vuln_id: Mapped[Optional[str]] = mapped_column(String(100))
@@ -647,7 +647,7 @@ class ScanDiffItem(Base):
     value: Mapped[str] = mapped_column(String(2000), nullable=False)
     detail: Mapped[Optional[str]] = mapped_column(Text)
     severity: Mapped[Optional[FindingSeverity]] = mapped_column(
-        Enum(FindingSeverity, name="finding_severity", create_type=False)
+        Enum(FindingSeverity, name="finding_severity", create_type=False, values_callable=lambda e: [x.value for x in e])
     )
     finding_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("findings.id", ondelete="SET NULL"))
 
@@ -668,8 +668,8 @@ class Report(Base):
 
     id: Mapped[uuid.UUID] = UUID_PK()
     scan_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
-    template: Mapped[ReportTemplate] = mapped_column(Enum(ReportTemplate, name="report_template", create_type=False), nullable=False)
-    format: Mapped[ReportFormat] = mapped_column(Enum(ReportFormat, name="report_format", create_type=False), nullable=False)
+    template: Mapped[ReportTemplate] = mapped_column(Enum(ReportTemplate, name="report_template", create_type=False, values_callable=lambda e: [x.value for x in e]), nullable=False)
+    format: Mapped[ReportFormat] = mapped_column(Enum(ReportFormat, name="report_format", create_type=False, values_callable=lambda e: [x.value for x in e]), nullable=False)
     company_name: Mapped[Optional[str]] = mapped_column(String(255))
     report_title: Mapped[Optional[str]] = mapped_column(String(500))
     primary_color: Mapped[Optional[str]] = mapped_column(String(7))
@@ -698,7 +698,7 @@ class NotificationChannelModel(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = UUID_PK()
     project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     channel_type: Mapped[NotificationChannel] = mapped_column(
-        Enum(NotificationChannel, name="notification_channel", create_type=False), nullable=False
+        Enum(NotificationChannel, name="notification_channel", create_type=False, values_callable=lambda e: [x.value for x in e]), nullable=False
     )
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     config: Mapped[dict] = mapped_column(JSONB, nullable=False)
@@ -717,7 +717,7 @@ class NotificationLog(Base):
     id: Mapped[uuid.UUID] = UUID_PK()
     channel_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("notification_channels.id", ondelete="CASCADE"), nullable=False)
     event_type: Mapped[NotificationEvent] = mapped_column(
-        Enum(NotificationEvent, name="notification_event", create_type=False), nullable=False
+        Enum(NotificationEvent, name="notification_event", create_type=False, values_callable=lambda e: [x.value for x in e]), nullable=False
     )
     scan_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("scans.id", ondelete="SET NULL"))
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)

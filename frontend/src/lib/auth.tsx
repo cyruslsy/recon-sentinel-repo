@@ -24,6 +24,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function loadUser() {
+    if (!getAccessToken()) {
+      setLoading(false);
+      return;
+    }
     try {
       const profile = await api.me();
       setUser(profile);
