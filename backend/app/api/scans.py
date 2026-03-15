@@ -87,7 +87,7 @@ async def launch_scan(data: ScanCreate, user: User = Depends(get_current_user), 
         created_by=user.id,
     )
     db.add(scan)
-    await db.commit()
+    await db.flush()
     await db.refresh(scan)
 
     # Dispatch to Celery orchestrator
@@ -230,7 +230,7 @@ async def decide_gate(
     gate.user_modifications = data.user_modifications
     from datetime import datetime
     gate.decided_at = utc_now()
-    await db.commit()
+    await db.flush()
     await db.refresh(gate)
 
     # Signal orchestrator to resume from checkpoint

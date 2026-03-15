@@ -77,6 +77,38 @@ async def reset_api_key_rate_limit(ip: str) -> None:
     await redis_client.delete(f"api_key_fail:{ip}")
 
 
+# ─── Login Rate Limiting ──────────────────────────────────────
+
+async def check_login_rate_limit(ip: str) -> bool:
+    """
+    Check if an IP is rate-limited for login attempts.
+    5 failures in 60s → 15-minute lockout.
+    Returns True if allowed, False if blocked.
+    """
+    lockout_key = f"login_lockout:{ip}"
+    if await redis_client.exists(lockout_key):
+        return False
+
+    fail_key = f"login_fail:{ip}"
+    count = await redis_client.get(fail_key)
+    return count is None or int(count) < 5
+
+
+async def record_login_failure(ip: str) -> None:
+    """Record a failed login attempt. Lockout after 5 failures in 60s."""
+    fail_key = f"login_fail:{ip}"
+    count = await redis_client.incr(fail_key)
+    if count == 1:
+        await redis_client.expire(fail_key, 60)
+    if count >= 5:
+        await redis_client.setex(f"login_lockout:{ip}", 900, "1")
+
+
+async def reset_login_rate_limit(ip: str) -> None:
+    """Reset login rate limit counter on successful login."""
+    await redis_client.delete(f"login_fail:{ip}")
+
+
 # ─── WebSocket Pub/Sub ────────────────────────────────────────
 
 async def publish_scan_event(scan_id: str, event: dict) -> None:

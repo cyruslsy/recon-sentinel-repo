@@ -57,7 +57,7 @@ async def create_session(scan_id: UUID | None = None, title: str | None = None, 
         user_id=user.id,
     )
     db.add(session)
-    await db.commit()
+    await db.flush()
     await db.refresh(session)
     return ChatSessionResponse(
         id=session.id, scan_id=session.scan_id, title=session.title,
@@ -110,7 +110,7 @@ async def send_message(session_id: UUID, data: ChatMessageCreate, user: User = D
         slash_command=data.slash_command,
     )
     db.add(user_msg)
-    await db.commit()
+    await db.flush()
     await db.refresh(user_msg)
 
     # Detect slash command
@@ -196,7 +196,7 @@ async def send_message(session_id: UUID, data: ChatMessageCreate, user: User = D
         cost_usd=cost,
     )
     db.add(ai_msg)
-    await db.commit()
+    await db.flush()
     await db.refresh(ai_msg)
     logger.info(f"Chat response generated in session {session_id}")
 

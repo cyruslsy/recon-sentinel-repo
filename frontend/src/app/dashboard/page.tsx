@@ -188,6 +188,7 @@ export default function DashboardPage() {
     <AppLayout>
       <div className="max-w-7xl mx-auto">
         <h1 className="text-xl font-semibold mb-6">Dashboard</h1>
+        <p className="text-sentinel-muted text-sm mb-4">Overview of your reconnaissance activity and findings</p>
 
         {/* Stat Cards */}
         <div className="grid grid-cols-5 gap-4 mb-6">

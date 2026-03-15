@@ -114,6 +114,7 @@ function MitrePageInner() {
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-xl font-semibold">MITRE ATT&CK Heatmap</h1>
+        <p className="text-sentinel-muted text-sm mb-4">Map findings to MITRE ATT&CK techniques and tactics</p>
           {techniques.length > 0 && (
             <div className="flex gap-1 bg-sentinel-surface rounded-lg p-0.5">
               <button

@@ -1,10 +1,7 @@
 """
-Recon Sentinel — Wayback Machine Agent
-Queries the Wayback Machine CDX API to discover:
-  - Historical URLs (old endpoints, removed pages)
-  - Leaked API keys and config files in archived pages
-  - Admin panels and login pages that were removed but still cached
-  - Old JavaScript files with embedded secrets
+Recon Sentinel — URL Discovery Agent (gau)
+Multi-source URL collection: Wayback Machine, Common Crawl, OTX, URLScan.
+Replaces single-source Wayback CDX API with gau for broader coverage.
 
 Phase: Passive
 MITRE: T1593 (Search Open Websites/Domains)
@@ -14,8 +11,6 @@ import hashlib
 import logging
 from collections import Counter
 from urllib.parse import urlparse
-
-import httpx
 
 from app.agents.base import BaseAgent
 from app.core.celery_app import celery_app
@@ -42,9 +37,11 @@ INTERESTING_PATHS = {
     "/.git/", "/.svn/", "/.env", "/robots.txt", "/sitemap.xml",
 }
 
+URL_CAP = 10000
+
 class WaybackAgent(BaseAgent):
     agent_type = "wayback"
-    agent_name = "Wayback Machine Discovery"
+    agent_name = "URL Discovery Agent (gau)"
     mitre_tags = ["T1593"]
     max_retries = 1
 
@@ -52,15 +49,15 @@ class WaybackAgent(BaseAgent):
         target = self.target_value
         findings = []
 
-        # ─── Phase 1: Query CDX API for all archived URLs ─────
-        await self.report_progress(10, "Querying Wayback Machine CDX API...")
-        urls = await self._query_cdx(target)
+        # ─── Phase 1: Run gau for multi-source URL collection ──
+        await self.report_progress(10, "Running gau (multi-source URL discovery)...")
+        urls = await self._run_gau(target)
 
         if not urls:
-            logger.info(f"No Wayback Machine data for {target}")
+            logger.info(f"No archived URLs found for {target}")
             return findings
 
-        await self.report_progress(30, f"Found {len(urls)} archived URLs")
+        await self.report_progress(30, f"Found {len(urls)} URLs from gau")
 
         # ─── Phase 2: Classify interesting URLs ───────────────
         await self.report_progress(40, "Classifying URLs...")
@@ -73,20 +70,18 @@ class WaybackAgent(BaseAgent):
             path = parsed.path.lower()
             all_paths.append(path)
 
-            # Check for sensitive file extensions
             for ext in INTERESTING_EXTENSIONS:
                 if path.endswith(ext):
                     interesting_files.append(url)
                     break
 
-            # Check for interesting paths
             for pattern in INTERESTING_PATHS:
                 if pattern in path:
                     interesting_endpoints.append(url)
                     break
 
-        # Deduplicate by path (keep unique paths, not timestamps)
-        seen_paths = set()
+        # Deduplicate by path
+        seen_paths: set[str] = set()
         unique_files = []
         for url in interesting_files:
             path = urlparse(url).path
@@ -105,7 +100,7 @@ class WaybackAgent(BaseAgent):
         # ─── Phase 3: Report interesting files ────────────────
         await self.report_progress(60, f"Found {len(unique_files)} sensitive files, {len(unique_endpoints)} interesting endpoints")
 
-        for url in unique_files[:50]:  # Cap at 50
+        for url in unique_files[:50]:
             path = urlparse(url).path
             ext = "." + path.rsplit(".", 1)[-1] if "." in path else ""
             severity = FindingSeverity.HIGH if ext in {".env", ".key", ".pem", ".htpasswd", ".sql", ".bak"} else FindingSeverity.MEDIUM
@@ -114,14 +109,14 @@ class WaybackAgent(BaseAgent):
                 "finding_type": FindingType.HISTORICAL,
                 "severity": severity,
                 "value": f"Archived sensitive file: {path}",
-                "detail": f"Found in Wayback Machine: {url}. File type '{ext}' may contain credentials, configuration, or backup data.",
+                "detail": f"Discovered via gau: {url}. File type '{ext}' may contain credentials, configuration, or backup data.",
                 "mitre_technique_ids": ["T1593"],
                 "fingerprint": hashlib.sha256(f"wayback:file:{path}".encode()).hexdigest()[:32],
-                "raw_data": {"url": url, "path": path, "extension": ext, "source": "wayback_cdx"},
+                "raw_data": {"url": url, "path": path, "extension": ext, "source": "gau"},
                 "tags": ["historical", "sensitive_file"],
             })
 
-        for url in unique_endpoints[:50]:  # Cap at 50
+        for url in unique_endpoints[:50]:
             path = urlparse(url).path
             severity = FindingSeverity.MEDIUM if any(p in path for p in {"/admin", "/debug", "/actuator", "/.git/"}) else FindingSeverity.INFO
 
@@ -129,17 +124,16 @@ class WaybackAgent(BaseAgent):
                 "finding_type": FindingType.HISTORICAL,
                 "severity": severity,
                 "value": f"Archived endpoint: {path}",
-                "detail": f"Found in Wayback Machine: {url}. Endpoint may still be accessible or reveal architecture information.",
+                "detail": f"Discovered via gau: {url}. Endpoint may still be accessible or reveal architecture information.",
                 "mitre_technique_ids": ["T1593"],
                 "fingerprint": hashlib.sha256(f"wayback:endpoint:{path}".encode()).hexdigest()[:32],
-                "raw_data": {"url": url, "path": path, "source": "wayback_cdx"},
+                "raw_data": {"url": url, "path": path, "source": "gau"},
                 "tags": ["historical", "endpoint"],
             })
 
         # ─── Phase 4: URL pattern analysis ────────────────────
         await self.report_progress(80, "Analyzing URL patterns...")
 
-        # Find technology indicators from URL patterns
         tech_indicators = Counter()
         for path in all_paths:
             if "/wp-" in path or "/wordpress" in path:
@@ -163,7 +157,7 @@ class WaybackAgent(BaseAgent):
                 "finding_type": FindingType.TECH_STACK,
                 "severity": FindingSeverity.INFO,
                 "value": f"Historical tech stack: {', '.join(t[0] for t in top_tech)}",
-                "detail": f"URL pattern analysis across {len(urls)} archived URLs suggests: {', '.join(f'{t[0]} ({t[1]} URLs)' for t in top_tech)}",
+                "detail": f"URL pattern analysis across {len(urls)} URLs suggests: {', '.join(f'{t[0]} ({t[1]} URLs)' for t in top_tech)}",
                 "mitre_technique_ids": ["T1592"],
                 "fingerprint": hashlib.sha256(f"wayback:tech:{target}".encode()).hexdigest()[:32],
                 "raw_data": {"tech_indicators": dict(tech_indicators), "total_urls": len(urls)},
@@ -174,9 +168,9 @@ class WaybackAgent(BaseAgent):
         findings.append({
             "finding_type": FindingType.HISTORICAL,
             "severity": FindingSeverity.INFO,
-            "value": f"Wayback Machine: {len(urls)} URLs archived for {target}",
+            "value": f"URL Discovery: {len(urls)} URLs collected for {target}",
             "detail": (
-                f"Total archived URLs: {len(urls)}. "
+                f"Total URLs (via gau): {len(urls)}. "
                 f"Sensitive files: {len(unique_files)}. "
                 f"Interesting endpoints: {len(unique_endpoints)}. "
                 f"Unique paths: {len(set(all_paths))}."
@@ -187,49 +181,34 @@ class WaybackAgent(BaseAgent):
             "tags": ["historical", "summary"],
         })
 
-        await self.report_progress(100, f"Wayback analysis complete: {len(findings)} findings")
         return findings
 
-    # ─── CDX API ──────────────────────────────────────────────
+    # ─── gau Subprocess ────────────────────────────────────────
 
-    async def _query_cdx(self, domain: str, max_pages: int = 5) -> list[str]:
-        """Query Wayback Machine CDX API for archived URLs."""
-        all_urls = set()
+    async def _run_gau(self, domain: str) -> list[str]:
+        """Run gau to collect URLs from multiple sources (wayback, commoncrawl, otx, urlscan)."""
+        try:
+            result = await self.run_command(
+                ["gau", "--subs", domain],
+                timeout=180,
+            )
+            if result["returncode"] != 0:
+                logger.warning(f"gau exited with code {result['returncode']}: {result['stderr'][:200]}")
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            for page in range(max_pages):
-                try:
-                    resp = await client.get(
-                        "https://web.archive.org/cdx/search/cdx",
-                        params={
-                            "url": f"*.{domain}/*",
-                            "output": "text",
-                            "fl": "original",
-                            "collapse": "urlkey",
-                            "page": page,
-                            "limit": 10000,
-                        },
-                    )
-                    if resp.status_code != 200:
-                        break
-                    lines = resp.text.strip().split("\n")
-                    if not lines or lines == [""]:
-                        break
-                    for line in lines:
-                        url = line.strip()
-                        if url and url.startswith("http"):
-                            all_urls.add(url)
+            urls: set[str] = set()
+            if result["stdout"].strip():
+                for line in result["stdout"].strip().split("\n"):
+                    url = line.strip()
+                    if url and url.startswith("http"):
+                        urls.add(url)
+                        if len(urls) >= URL_CAP:
+                            logger.info(f"gau URL cap reached ({URL_CAP})")
+                            break
 
-                    await self.report_progress(
-                        10 + (page * 4),
-                        f"CDX page {page + 1}: {len(all_urls)} URLs",
-                    )
-
-                except httpx.RequestError as e:
-                    logger.warning(f"CDX API error on page {page}: {e}")
-                    break
-
-        return sorted(all_urls)
+            return sorted(urls)
+        except Exception as e:
+            logger.warning(f"gau failed: {e}")
+            return []
 
 
 @celery_app.task(name="app.agents.wayback.run_wayback_agent")

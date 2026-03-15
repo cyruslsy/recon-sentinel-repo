@@ -42,7 +42,7 @@ async def list_projects(org_id: UUID | None = None, user: User = Depends(get_cur
 async def create_project(org_id: UUID, data: ProjectCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     project = Project(**data.model_dump(), org_id=org_id, created_by=user.id)
     db.add(project)
-    await db.commit()
+    await db.flush()
     await db.refresh(project)
     return project
 

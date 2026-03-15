@@ -26,6 +26,7 @@ from app.api.reports import router as reports_router
 from app.api.history import router as history_router
 from app.api.chat import router as chat_router
 from app.api.notifications import router as notifications_router
+from app.api.screenshots import router as screenshots_router
 from app.api.settings import router as settings_router
 from app.api.websocket import router as ws_router
 
@@ -102,6 +103,7 @@ app.include_router(reports_router,       prefix=f"{PREFIX}/reports",       tags=
 app.include_router(history_router,       prefix=f"{PREFIX}/history",       tags=["Scan History"])
 app.include_router(chat_router,          prefix=f"{PREFIX}/chat",          tags=["AI Copilot"])
 app.include_router(notifications_router, prefix=f"{PREFIX}/notifications", tags=["Notifications"])
+app.include_router(screenshots_router,   prefix=f"{PREFIX}/screenshots",   tags=["Screenshots"])
 app.include_router(settings_router,      prefix=f"{PREFIX}/settings",      tags=["Settings"])
 app.include_router(ws_router,            prefix="/ws",                     tags=["WebSocket"])
 

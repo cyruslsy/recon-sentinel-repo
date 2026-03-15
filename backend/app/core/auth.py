@@ -133,20 +133,26 @@ async def get_current_user(
     if payload.get("type") != "access":
         raise HTTPException(status_code=401, detail="Invalid token type — use access token")
 
-    # Check per-token blacklist
+    # Check per-token blacklist and user-level revocation via Redis.
+    # If Redis is down, fail closed (deny access) to prevent use of revoked tokens.
     jti = payload.get("jti")
-    if jti and await is_token_blacklisted(jti):
-        raise HTTPException(status_code=401, detail="Token has been revoked")
-
-    # Check user-level revocation (password change)
     user_id = payload.get("sub")
-    revoked_at = await get_user_revoked_at(user_id)
-    if revoked_at:
-        token_iat = payload.get("iat", 0)
-        if isinstance(token_iat, datetime):
-            token_iat = int(token_iat.timestamp())
-        if token_iat < revoked_at:
-            raise HTTPException(status_code=401, detail="Token invalidated by password change")
+    try:
+        if jti and await is_token_blacklisted(jti):
+            raise HTTPException(status_code=401, detail="Token has been revoked")
+
+        # Check user-level revocation (password change)
+        revoked_at = await get_user_revoked_at(user_id)
+        if revoked_at:
+            token_iat = payload.get("iat", 0)
+            if isinstance(token_iat, datetime):
+                token_iat = int(token_iat.timestamp())
+            if token_iat < revoked_at:
+                raise HTTPException(status_code=401, detail="Token invalidated by password change")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="Authentication service temporarily unavailable")
 
     # Load user from DB
     user = await db.get(User, uuid.UUID(user_id))

@@ -11,6 +11,7 @@ Every agent inherits from this. Provides:
 
 import asyncio
 import os
+import shutil
 import signal
 import uuid
 import json
@@ -32,6 +33,41 @@ from app.models.enums import (
 )
 
 logger = logging.getLogger(__name__)
+
+DB_RETRY_ATTEMPTS = 3
+DB_RETRY_BASE_DELAY = 0.5  # seconds, doubles each retry
+
+
+async def _db_write_with_retry(coro_factory, label: str = "db_write") -> Any:
+    """Execute a DB write with exponential backoff retry.
+
+    coro_factory: a callable that returns a new coroutine each attempt
+    (needed because coroutines can only be awaited once).
+    """
+    last_err = None
+    for attempt in range(1, DB_RETRY_ATTEMPTS + 1):
+        try:
+            return await coro_factory()
+        except Exception as e:
+            last_err = e
+            if attempt < DB_RETRY_ATTEMPTS:
+                delay = DB_RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                logger.warning(f"{label} attempt {attempt}/{DB_RETRY_ATTEMPTS} failed: {e}. Retrying in {delay}s...")
+                await asyncio.sleep(delay)
+            else:
+                logger.error(f"{label} failed after {DB_RETRY_ATTEMPTS} attempts: {e}")
+    raise last_err  # type: ignore[misc]
+
+
+def _dump_findings_to_disk(scan_id: str, agent_type: str, findings: list[dict]) -> str:
+    """Emergency fallback: write findings to JSON file when DB is completely unavailable."""
+    recovery_dir = "/data/recovery"
+    os.makedirs(recovery_dir, exist_ok=True)
+    path = f"{recovery_dir}/{scan_id}_{agent_type}_{uuid.uuid4().hex[:8]}.json"
+    with open(path, "w") as f:
+        json.dump(findings, f, default=str)
+    logger.critical(f"DB unavailable — {len(findings)} findings saved to {path}")
+    return path
 
 
 class BaseAgent(ABC):
@@ -96,6 +132,7 @@ class BaseAgent(ABC):
     async def run(self) -> dict:
         """
         Full agent lifecycle:
+        0. Reset DB engine for new event loop (Celery prefork creates new loops)
         1. Create agent_run record
         2. Check scope
         3. Execute scanning logic
@@ -103,6 +140,12 @@ class BaseAgent(ABC):
         5. Update agent_run status
         Returns summary dict.
         """
+        # Step 0: Reset DB engine for Celery's new event loop
+        # Celery prefork workers call asyncio.run() which creates a fresh loop,
+        # but the module-level engine was created on a different loop at import time.
+        from app.core.database import engine
+        await engine.dispose()
+
         # Step 1: Create agent_run (short session)
         async with AsyncSessionLocal() as db:
             agent_run = AgentRun(
@@ -137,10 +180,21 @@ class BaseAgent(ABC):
             await self.report_progress(5, "Starting scan...")
             raw_findings = await self.execute()
 
-            # Step 4: Save findings (short session)
-            async with AsyncSessionLocal() as db:
-                await self.report_progress(85, "Saving findings...")
-                created = await self._create_findings(db, raw_findings)
+            # Step 4: Save findings with retry (short session)
+            await self.report_progress(85, "Saving findings...")
+            try:
+                async def _save():
+                    async with AsyncSessionLocal() as db:
+                        return await self._create_findings(db, raw_findings)
+                created = await _db_write_with_retry(_save, f"{self.agent_type}:save_findings")
+            except Exception as e:
+                # All retries failed — dump to disk for recovery
+                logger.error(f"DB write failed for {self.agent_type}, falling back to disk: {e}")
+                try:
+                    _dump_findings_to_disk(self.scan_id, self.agent_type, raw_findings)
+                except Exception as disk_err:
+                    logger.critical(f"DOUBLE FAILURE: DB and disk fallback both failed: {disk_err}")
+                created = []  # 0 findings in DB — accurate count
 
             # Step 5: Update agent_run status (short session)
             await self._update_agent_run(
@@ -252,8 +306,18 @@ class BaseAgent(ABC):
         
         Returns:
             {"stdout": str, "stderr": str, "returncode": int, "parsed": list|None}
+
+        Raises:
+            FileNotFoundError: If the tool binary is not in PATH.
         """
         tool_name = cmd[0] if cmd else "unknown"
+
+        # Pre-flight: verify tool binary exists before launching subprocess
+        if not shutil.which(tool_name):
+            raise FileNotFoundError(
+                f"{tool_name} not found in PATH — check Dockerfile or install the tool"
+            )
+
         if not silent:
             await self.report_progress(self._progress, f"Running {tool_name}...")
 

@@ -1,10 +1,13 @@
 """
 Recon Sentinel — Subdomain Discovery Agent
-Tools: Subfinder (primary), crt.sh API (passive), DNS brute (optional)
+Tools: Subfinder (passive), crt.sh (passive), puredns+massdns (active brute-force)
 MITRE: T1593 (Search Open Websites/Domains), T1596 (Search Open Technical Databases)
 
-Self-correction: DNS wildcard detection — if a random subdomain resolves
-to the same IP, filter that IP from results.
+Phase B upgrades:
+  - puredns brute-force with n0kovo 3M wordlist (full/bounty profiles)
+  - SecLists 5K wordlist for quick/stealth profiles
+  - Subdomain permutation via puredns resolve
+  - Wildcard detection filters false positives
 """
 
 import hashlib
@@ -28,11 +31,16 @@ class SubdomainAgent(BaseAgent):
     mitre_tags = ["T1593", "T1596"]
 
     async def execute(self) -> list[dict]:
-        """Run Subfinder + crt.sh, deduplicate, detect wildcards."""
+        """Run Subfinder + crt.sh (passive) + puredns brute-force (active), deduplicate, detect wildcards."""
         domain = self.target_value
+        profile = self.config.get("profile", "full")
         all_subdomains: set[str] = set()
+        sources: dict[str, set[str]] = {}  # subdomain → set of source names
 
-        # ─── Source 1: Subfinder ──────────────────────────────
+        def _track(sub: str, source: str) -> None:
+            sources.setdefault(sub, set()).add(source)
+
+        # ─── Source 1: Subfinder (passive) ────────────────────
         await self.report_progress(10, "Running Subfinder...")
         try:
             result = await self.run_command(
@@ -45,18 +53,31 @@ class SubdomainAgent(BaseAgent):
                     host = entry.get("host", "").strip().lower()
                     if host and (host.endswith(f".{domain}") or host == domain):
                         all_subdomains.add(host)
+                        _track(host, "subfinder")
                 logger.info(f"Subfinder found {len(all_subdomains)} subdomains")
         except Exception as e:
             logger.warning(f"Subfinder failed: {e}")
 
         # ─── Source 2: crt.sh (Certificate Transparency) ─────
-        await self.report_progress(40, "Querying crt.sh...")
+        await self.report_progress(25, "Querying crt.sh...")
         try:
             crtsh_subs = await self._query_crtsh(domain)
+            for s in crtsh_subs:
+                _track(s, "crt.sh")
             all_subdomains.update(crtsh_subs)
             logger.info(f"crt.sh added {len(crtsh_subs)} subdomains")
         except Exception as e:
             logger.warning(f"crt.sh query failed: {e}")
+
+        # ─── Source 3: puredns brute-force (active) ───────────
+        # Skip for passive_only profile; use small wordlist for quick/stealth
+        if profile != "passive_only":
+            brute_subs = await self._run_puredns_bruteforce(domain, profile)
+            for s in brute_subs:
+                _track(s, "puredns")
+            before = len(all_subdomains)
+            all_subdomains.update(brute_subs)
+            logger.info(f"puredns brute-force added {len(all_subdomains) - before} new subdomains")
 
         await self.report_progress(60, f"Found {len(all_subdomains)} subdomains, checking wildcards...")
 
@@ -70,9 +91,8 @@ class SubdomainAgent(BaseAgent):
         findings = []
         for sub in sorted(all_subdomains):
             resolved_ips = await self._resolve(sub)
-
-            # Filter out wildcard IPs
             is_wildcard = bool(wildcard_ips and set(resolved_ips) <= wildcard_ips)
+            sub_sources = sorted(sources.get(sub, ["unknown"]))
 
             fingerprint = hashlib.sha256(f"subdomain:{sub}".encode()).hexdigest()[:32]
 
@@ -80,18 +100,64 @@ class SubdomainAgent(BaseAgent):
                 "finding_type": FindingType.SUBDOMAIN,
                 "severity": FindingSeverity.INFO,
                 "value": sub,
-                "detail": f"Subdomain discovered via passive enumeration. Resolves to: {', '.join(resolved_ips) or 'NXDOMAIN'}",
+                "detail": f"Subdomain discovered via {', '.join(sub_sources)}. Resolves to: {', '.join(resolved_ips) or 'NXDOMAIN'}",
                 "mitre_technique_ids": ["T1593"],
                 "fingerprint": fingerprint,
                 "raw_data": {
                     "resolved_ips": resolved_ips,
                     "is_wildcard": is_wildcard,
-                    "sources": self._get_sources(sub, all_subdomains),
+                    "sources": sub_sources,
                 },
                 "tags": ["wildcard"] if is_wildcard else [],
             })
 
         return findings
+
+    # ─── puredns Brute-Force ──────────────────────────────────
+
+    WORDLISTS = {
+        "quick": "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt",
+        "stealth": "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt",
+        "full": "/usr/share/wordlists/n0kovo_subdomains_huge.txt",
+        "bounty": "/usr/share/wordlists/n0kovo_subdomains_huge.txt",
+    }
+    RESOLVERS = "/usr/share/wordlists/resolvers.txt"
+
+    async def _run_puredns_bruteforce(self, domain: str, profile: str) -> set[str]:
+        """Run puredns brute-force with profile-appropriate wordlist."""
+        wordlist = self.WORDLISTS.get(profile, self.WORDLISTS["quick"])
+
+        import os
+        if not os.path.isfile(wordlist):
+            logger.warning(f"Wordlist not found: {wordlist}, skipping brute-force")
+            return set()
+
+        await self.report_progress(40, f"Running puredns brute-force ({profile})...")
+
+        rate_limit = "200" if profile == "stealth" else "500"
+        timeout = 600 if profile in ("full", "bounty") else 180
+
+        try:
+            result = await self.run_command(
+                [
+                    "puredns", "bruteforce", wordlist, domain,
+                    "--resolvers", self.RESOLVERS,
+                    "--rate-limit", rate_limit,
+                    "--wildcard-batch", "1000000",
+                ],
+                timeout=timeout,
+            )
+            subdomains = set()
+            if result["returncode"] == 0 and result["stdout"].strip():
+                for line in result["stdout"].strip().split("\n"):
+                    sub = line.strip().lower()
+                    if sub and (sub.endswith(f".{domain}") or sub == domain):
+                        subdomains.add(sub)
+            logger.info(f"puredns found {len(subdomains)} subdomains")
+            return subdomains
+        except Exception as e:
+            logger.warning(f"puredns brute-force failed: {e}")
+            return set()
 
     # ─── crt.sh Query ─────────────────────────────────────────
 
@@ -149,10 +215,6 @@ class SubdomainAgent(BaseAgent):
             pass
         return []
 
-    @staticmethod
-    def _get_sources(subdomain: str, all_subs: set[str]) -> list[str]:
-        """Placeholder — in full implementation, track per-subdomain source."""
-        return ["subfinder", "crt.sh"]
 
 
 # ─── Celery Task ──────────────────────────────────────────────

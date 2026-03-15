@@ -128,9 +128,21 @@ class DirFileAgent(BaseAgent):
         if not target.startswith("http"):
             target = f"https://{target}"
 
+        # ─── C2: WAF-aware rate adjustment ──────────────────────
+        await self._adjust_for_waf()
+
         # ─── Wordlist Assembly (tiered, tech-adaptive) ──────────
         wordlist_path = await self._build_wordlist()
         logger.info(f"Assembled wordlist at {wordlist_path}")
+
+        # ─── C4: Baseline probe — detect custom 404s before full scan ──
+        await self.report_progress(8, "Running baseline probe...")
+        baseline = await self._run_baseline(target)
+        if baseline:
+            self._filter_size = baseline.get("filter_size")
+            self._filter_words = baseline.get("filter_words")
+            if self._filter_size:
+                logger.info(f"C4: Baseline detected custom 404 (size={self._filter_size})")
 
         # ─── Phase 1: Initial ffuf run ────────────────────────
         await self.report_progress(10, "Running ffuf...")
@@ -275,6 +287,10 @@ class DirFileAgent(BaseAgent):
         if tech_paths:
             logger.info(f"Tech-context: +{len(tech_paths)} sensitive paths from stacks: {tech_ctx.all_active_stacks}")
 
+        # Tier 3c: C1 — Seed paths from gau/wayback URL discovery
+        gau_paths = await self._seed_from_gau()
+        words.update(gau_paths)
+
         # Tier 4: Custom user wordlists from config
         custom_lists = self.config.get("custom_wordlists", [])
         for custom_path in custom_lists:
@@ -302,6 +318,72 @@ class DirFileAgent(BaseAgent):
         logger.info(f"Assembled wordlist: {len(words)} entries (profile={profile}, tech_lists={len(tech_lists_added)})")
         return path
 
+    async def _adjust_for_waf(self) -> None:
+        """C2: Check WAF detection findings and reduce rate if WAF is active."""
+        async with AsyncSessionLocal() as db:
+            from sqlalchemy import select
+            result = await db.execute(
+                select(Finding.value, Finding.raw_data)
+                .where(Finding.scan_id == uuid.UUID(self.scan_id))
+                .where(Finding.finding_type == FindingType.WAF_DETECTION)
+            )
+            waf_findings = result.all()
+
+        if not waf_findings:
+            return
+
+        # Check if any WAF actively blocks attacks
+        active_waf = any(
+            r.raw_data.get("blocks_attacks", False)
+            for r in waf_findings
+            if r.raw_data and isinstance(r.raw_data, dict)
+        )
+
+        if active_waf:
+            self._rate_limit = min(self._rate_limit, 20)
+            self._threads = min(self._threads, 3)
+            self._delay = max(self._delay, 1.0)
+            self._user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0"
+            waf_names = [r.value for r in waf_findings]
+            logger.info(f"WAF detected ({waf_names}): rate={self._rate_limit}, threads={self._threads}, delay={self._delay}")
+        else:
+            # Passive WAF — moderate reduction
+            self._rate_limit = min(self._rate_limit, 50)
+            logger.info("Passive WAF detected: reduced rate to 50")
+
+    async def _seed_from_gau(self) -> set[str]:
+        """C1: Extract paths from gau/wayback findings to seed wordlist."""
+        paths: set[str] = set()
+        async with AsyncSessionLocal() as db:
+            from sqlalchemy import select
+            from urllib.parse import urlparse
+            result = await db.execute(
+                select(Finding.raw_data)
+                .where(Finding.scan_id == uuid.UUID(self.scan_id))
+                .where(Finding.finding_type == FindingType.HISTORICAL)
+            )
+            for (raw_data,) in result.all():
+                if raw_data and isinstance(raw_data, dict):
+                    url = raw_data.get("url") or raw_data.get("path", "")
+                    if url:
+                        parsed = urlparse(url) if url.startswith("http") else None
+                        path = parsed.path if parsed else url
+                        # Extract directory segments and full path
+                        path = path.strip("/")
+                        if path and len(path) < 200:
+                            paths.add(path)
+                            # Also add parent directories
+                            parts = path.split("/")
+                            for i in range(1, len(parts)):
+                                paths.add("/".join(parts[:i]))
+
+        # Cap to prevent wordlist bloat
+        if len(paths) > 500:
+            paths = set(sorted(paths)[:500])
+        if paths:
+            logger.info(f"C1: Seeded {len(paths)} paths from gau/wayback findings")
+        return paths
+
     async def _detect_technologies(self) -> list[str]:
         """Get technologies detected by earlier agents for this scan."""
         techs = set()
@@ -319,6 +401,49 @@ class DirFileAgent(BaseAgent):
                     for tech in raw_data.get("tech_detected", []):
                         techs.add(tech)
         return list(techs)
+
+    # ─── C4: Baseline Probe ──────────────────────────────────
+
+    async def _run_baseline(self, target: str) -> dict | None:
+        """Probe 5 random non-existent paths to detect custom 404 responses."""
+        import random, string
+        probes = [
+            "/" + "".join(random.choices(string.ascii_lowercase, k=12))
+            for _ in range(5)
+        ]
+
+        # Write probe paths to temp file
+        fd, probe_path = tempfile.mkstemp(suffix=".txt", prefix="baseline_")
+        with os.fdopen(fd, "w") as f:
+            f.write("\n".join(probes))
+
+        try:
+            result = await self.run_command(
+                [
+                    "ffuf", "-u", f"{target}/FUZZ", "-w", probe_path,
+                    "-mc", "all", "-json", "-s", "-t", "5",
+                ],
+                timeout=30,
+                parse_json=True,
+                silent=True,
+            )
+            if result["parsed"]:
+                # All responses from random paths are 404-equivalents
+                sizes = [e.get("length", 0) for e in result["parsed"]]
+                words = [e.get("words", 0) for e in result["parsed"]]
+
+                # If all responses have the same size → custom 404
+                if sizes and len(set(sizes)) == 1 and sizes[0] > 0:
+                    return {"filter_size": sizes[0]}
+                # If all have same word count → custom 404
+                if words and len(set(words)) == 1 and words[0] > 0:
+                    return {"filter_words": words[0]}
+        except Exception as e:
+            logger.debug(f"Baseline probe failed: {e}")
+        finally:
+            os.unlink(probe_path)
+
+        return None
 
     # ─── ffuf Execution ───────────────────────────────────────
 

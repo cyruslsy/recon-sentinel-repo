@@ -82,7 +82,7 @@ async def rerun_agent(agent_run_id: UUID, user: User = Depends(get_current_user)
         status=AgentStatus.PENDING,
     )
     db.add(new_run)
-    await db.commit()
+    await db.flush()
     await db.refresh(new_run)
 
     # Dispatch to Celery
@@ -150,7 +150,7 @@ async def decide_health_escalation(event_id: UUID, data: HealthEventDecision, us
 
     event.user_decision = data.decision
     event.decided_at = utc_now()
-    await db.commit()
+    await db.flush()
     await db.refresh(event)
 
     # Publish decision to Redis so the waiting agent can pick it up

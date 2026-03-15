@@ -7,7 +7,7 @@ import type {
   TokenResponse, User, Scan, ScanBrief, AgentRun, Finding, ApprovalGate,
   Organization, Project, Target, ScopeItem, ScopeViolation,
   Report, ChatSession, ChatMessage, ApiKeyConfig, LlmUsageSummary,
-  CredentialLeak, CredentialSummary, MitreHeatmapItem, HealthEvent,
+  CredentialLeak, CredentialSummary, MitreHeatmapItem, HealthEvent, Screenshot,
 } from "./types";
 
 const API_BASE = "/api/v1";
@@ -37,6 +37,13 @@ class ApiError extends Error {
 export { ApiError };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  // Ensure trailing slash on path portion to prevent FastAPI 307 redirects
+  // which cause browsers to drop the Authorization header.
+  const qIdx = path.indexOf("?");
+  const pathPart = qIdx >= 0 ? path.slice(0, qIdx) : path;
+  const queryPart = qIdx >= 0 ? path.slice(qIdx) : "";
+  const normalizedPath = pathPart.endsWith("/") ? pathPart + queryPart : pathPart + "/" + queryPart;
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
@@ -45,9 +52,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers["Authorization"] = `Bearer ${accessToken}`;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers, credentials: "include" });
+  const res = await fetch(`${API_BASE}${normalizedPath}`, { ...options, headers, credentials: "include" });
 
   if (res.status === 401) {
+    // For auth endpoints (login/register), don't try refresh — just surface the real error
+    const isAuthEndpoint = path.startsWith("/auth/login") || path.startsWith("/auth/register");
+    if (isAuthEndpoint) {
+      const body = await res.json().catch(() => ({ detail: "Authentication failed" }));
+      throw new ApiError(401, body.detail || "Authentication failed");
+    }
     const refreshed = await refreshToken();
     if (refreshed) {
       headers["Authorization"] = `Bearer ${accessToken}`;
@@ -106,6 +119,8 @@ export const api = {
 
   logout: () => request<void>("/auth/logout", { method: "POST" }),
 
+  completeSetup: () => request<{ status: string }>("/auth/complete-setup", { method: "POST" }),
+
   me: () => request<User>("/auth/me"),
 
   // Scans
@@ -113,7 +128,7 @@ export const api = {
     request<Scan[]>(`/scans${params ? `?${params}` : ""}`),
 
   launchScan: (data: { target_id: string; profile?: string }) =>
-    request<Scan>("/scans", { method: "POST", body: JSON.stringify(data) }),
+    request<Scan>("/scans/", { method: "POST", body: JSON.stringify(data) }),
 
   getScan: (id: string) => request<Scan>(`/scans/${id}`),
 
@@ -150,7 +165,7 @@ export const api = {
   listTargets: (projectId: string) => request<Target[]>(`/targets?project_id=${projectId}`),
 
   createTarget: (projectId: string, data: { target_value: string; input_type: string }) =>
-    request<Target>(`/targets?project_id=${projectId}`, { method: "POST", body: JSON.stringify(data) }),
+    request<Target>(`/targets/?project_id=${projectId}`, { method: "POST", body: JSON.stringify(data) }),
 
   getTargetContext: (targetId: string) =>
     request<{ resolved_ips: string[]; asn_info: string | null; cdn_detected: string | null; registrar: string | null; previous_scan_count: number }>(`/targets/${targetId}/context`),
@@ -158,12 +173,12 @@ export const api = {
   // Projects
   listProjects: () => request<Project[]>("/projects"),
   createProject: (orgId: string, data: { name: string }) =>
-    request<Project>(`/projects?org_id=${orgId}`, { method: "POST", body: JSON.stringify(data) }),
+    request<Project>(`/projects/?org_id=${orgId}`, { method: "POST", body: JSON.stringify(data) }),
 
   // Organizations
   listOrgs: () => request<Organization[]>("/organizations"),
   createOrg: (data: { name: string }) =>
-    request<Organization>("/organizations", { method: "POST", body: JSON.stringify(data) }),
+    request<Organization>("/organizations/", { method: "POST", body: JSON.stringify(data) }),
 
   // MITRE
   mitreHeatmap: (scanId: string) =>
@@ -188,7 +203,7 @@ export const api = {
   listReports: () => request<Report[]>("/reports"),
 
   generateReport: (data: { scan_id: string; template: string; format: string; sections?: string[] }) =>
-    request<Report>("/reports", { method: "POST", body: JSON.stringify(data) }),
+    request<Report>("/reports/", { method: "POST", body: JSON.stringify(data) }),
 
   // Chat
   listChatSessions: (scanId?: string) =>
@@ -204,6 +219,9 @@ export const api = {
     request<ChatMessage>(`/chat/sessions/${sessionId}/messages`, {
       method: "POST", body: JSON.stringify({ content }),
     }),
+
+  // Screenshots
+  listScreenshots: (scanId: string) => request<Screenshot[]>(`/screenshots?scan_id=${scanId}`),
 
   // Credentials
   listCredentials: (scanId: string) => request<CredentialLeak[]>(`/credentials?scan_id=${scanId}`),

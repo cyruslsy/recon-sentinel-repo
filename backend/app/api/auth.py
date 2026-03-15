@@ -9,7 +9,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tz import utc_now
@@ -18,7 +18,10 @@ from app.core.auth import (
     get_current_user, hash_password, revoke_token, verify_password,
 )
 from app.core.database import get_db
-from app.core.redis import blacklist_all_user_tokens
+from app.core.redis import (
+    blacklist_all_user_tokens, check_login_rate_limit,
+    record_login_failure, reset_login_rate_limit,
+)
 from app.models.enums import UserRole
 from app.models.models import User
 
@@ -49,6 +52,8 @@ class UserProfileResponse(BaseModel):
     display_name: str
     role: str
     is_active: bool
+    setup_completed: bool
+    last_login_at: datetime | None = None
     created_at: datetime
     class Config:
         from_attributes = True
@@ -69,6 +74,9 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
     # First registered user becomes admin — ensures the platform is usable
     # without needing direct DB access or the CLI script.
+    # Uses advisory lock to prevent race condition where two simultaneous
+    # registrations both see count=0 and both become admin.
+    await db.execute(text("SELECT pg_advisory_xact_lock(1)"))
     user_count = await db.execute(select(func.count()).select_from(User))
     is_first_user = user_count.scalar() == 0
 
@@ -90,13 +98,21 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(data: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
+async def login(data: LoginRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    client_ip = request.client.host if request.client else "unknown"
+    if not await check_login_rate_limit(client_ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Try again in 15 minutes.",
+        )
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
     if not user or not verify_password(data.password, user.password_hash):
+        await record_login_failure(client_ip)
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account is disabled")
+    await reset_login_rate_limit(client_ip)
     user.last_login_at = utc_now()
     await db.commit()
     access_token = create_access_token(str(user.id), user.role.value)
@@ -115,7 +131,7 @@ async def login(data: LoginRequest, response: Response, db: AsyncSession = Depen
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(request: Request, db: AsyncSession = Depends(get_db)):
+async def refresh(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     token = request.cookies.get("refresh_token")
     if not token:
         raise HTTPException(status_code=401, detail="No refresh token")
@@ -129,6 +145,19 @@ async def refresh(request: Request, db: AsyncSession = Depends(get_db)):
     user = await db.get(User, payload.get("sub"))
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+
+    # Rotate refresh token: blacklist the old one, issue a new one
+    if jti:
+        from datetime import timezone
+        exp = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
+        await revoke_token(jti, exp)
+    new_refresh, new_jti, new_expires = create_refresh_token(str(user.id))
+    response.set_cookie(
+        key="refresh_token", value=new_refresh,
+        httponly=True, secure=True, samesite="lax",
+        max_age=7 * 24 * 3600, path="/api/v1/auth",
+    )
+
     from app.core.config import get_settings
     s = get_settings()
     return TokenResponse(
@@ -144,7 +173,8 @@ async def logout(request: Request, response: Response, user: User = Depends(get_
         try:
             payload = decode_token(token)
             jti = payload.get("jti")
-            exp = datetime.utcfromtimestamp(payload.get("exp", 0))
+            from datetime import timezone
+            exp = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
             if jti:
                 await revoke_token(jti, exp)
         except Exception:
@@ -169,8 +199,18 @@ async def change_password(
 async def get_profile(user: User = Depends(get_current_user)):
     return UserProfileResponse(
         id=str(user.id), email=user.email, display_name=user.display_name,
-        role=user.role.value, is_active=user.is_active, created_at=user.created_at,
+        role=user.role.value, is_active=user.is_active,
+        setup_completed=user.setup_completed, last_login_at=user.last_login_at,
+        created_at=user.created_at,
     )
+
+
+@router.post("/complete-setup")
+async def complete_setup(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Mark the current user's initial setup as completed."""
+    user.setup_completed = True
+    await db.flush()
+    return {"status": "ok"}
 
 
 @router.post("/api-key")

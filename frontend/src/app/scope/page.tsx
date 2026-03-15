@@ -60,6 +60,7 @@ export default function ScopePage() {
     <AppLayout>
       <div className="max-w-5xl mx-auto">
         <h1 className="text-xl font-semibold mb-6">Scope Control</h1>
+        <p className="text-sentinel-muted text-sm mb-4">Define in-scope and out-of-scope boundaries for scanning</p>
 
         {/* Tabs */}
         <div className="flex gap-1 mb-6 bg-sentinel-surface rounded-lg p-1 w-fit">

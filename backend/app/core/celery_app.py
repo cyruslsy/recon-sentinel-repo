@@ -43,6 +43,30 @@ celery_app = Celery(
     "recon_sentinel",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
+    include=[
+        "app.agents.subdomain",
+        "app.agents.osint",
+        "app.agents.email_sec",
+        "app.agents.threat_intel",
+        "app.agents.cred_leak",
+        "app.agents.wayback",
+        "app.agents.github_dork",
+        "app.agents.port_scan",
+        "app.agents.web_recon",
+        "app.agents.web_spider",
+        "app.agents.ssl_tls",
+        "app.agents.dir_file",
+        "app.agents.js_analysis",
+        "app.agents.cloud",
+        "app.agents.waf",
+        "app.agents.vuln",
+        "app.agents.subdomain_takeover",
+        "app.agents.badsecrets",
+        "app.tasks.orchestrator",
+        "app.tasks.reports",
+        "app.tasks.notifications",
+        "app.tasks.maintenance",
+    ],
 )
 
 celery_app.conf.update(
@@ -142,5 +166,9 @@ celery_app.conf.update(
     },
 )
 
-# Auto-discover tasks in app.agents and app.tasks packages
-celery_app.autodiscover_tasks(["app.agents", "app.tasks"])
+# Auto-discover tasks — explicitly include all modules with Celery tasks
+celery_app.autodiscover_tasks(
+    ["app.agents", "app.tasks"],
+    related_name=None,  # Scan all .py files, not just tasks.py
+    force=True,
+)

@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/lib/auth";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -9,10 +9,12 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
-  }, [user, loading, router]);
+    if (!loading && user && !user.setup_completed && pathname !== "/setup") router.push("/setup");
+  }, [user, loading, router, pathname]);
 
   if (loading) {
     return (
@@ -22,7 +24,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) return null;
+  if (!user || !user.setup_completed) return null;
 
   return (
     <div className="flex min-h-screen">

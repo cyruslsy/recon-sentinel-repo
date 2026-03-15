@@ -373,6 +373,20 @@ class VulnAgent(BaseAgent):
                             if key in tech_lower:
                                 templates.update(paths)
 
+        # C5: Also use shared tech_context for broader stack coverage
+        try:
+            from app.agents.tech_context import get_scan_tech_context
+            tech_ctx = await get_scan_tech_context(self.scan_id)
+            for stack in tech_ctx.all_active_stacks:
+                stack_lower = stack.lower()
+                for key, paths in TECH_TEMPLATE_MAP.items():
+                    if key in stack_lower:
+                        templates.update(paths)
+            if tech_ctx.all_active_stacks:
+                logger.info(f"C5: Tech-context stacks enriched templates: {tech_ctx.all_active_stacks}")
+        except Exception as e:
+            logger.warning(f"C5: Tech-context template enrichment failed: {e}")
+
         # Don't add defaults — the -as mode handles that via Wappalyzer
         # Only return supplementary templates from our tech map
         return sorted(templates)

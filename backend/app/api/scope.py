@@ -41,7 +41,7 @@ async def add_scope_item(project_id: UUID, data: ScopeItemCreate, user: User = D
     """Add a domain, IP, CIDR, or regex to scope (in-scope or excluded)."""
     item = ScopeDefinition(**data.model_dump(), project_id=project_id, added_by=user.id)
     db.add(item)
-    await db.commit()
+    await db.flush()
     await db.refresh(item)
     logger.info(f"Scope item added: {data.item_value} to project {project_id}")
     return item
@@ -53,7 +53,7 @@ async def update_scope_item(item_id: UUID, data: ScopeItemUpdate, user: User = D
     from app.core.authorization import authorize_scope_item
     item = await authorize_scope_item(item_id, user, db)
     item.status = data.status
-    await db.commit()
+    await db.flush()
     await db.refresh(item)
     return item
 

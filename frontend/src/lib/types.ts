@@ -15,6 +15,7 @@ export interface User {
   display_name: string;
   role: "admin" | "tester" | "auditor";
   is_active: boolean;
+  setup_completed: boolean;
   last_login_at: string | null;
   created_at: string;
 }
@@ -123,6 +124,8 @@ export interface Finding {
   verification_status: VerificationStatus;
   severity_override: FindingSeverity | null;
   severity_override_reason: string | null;
+  raw_data: Record<string, unknown> | null;
+  remediation: string | null;
   created_at: string;
 }
 
@@ -200,6 +203,23 @@ export interface Report {
   file_path: string;
   file_size_bytes: number | null;
   generated_at: string;
+}
+
+// ─── Screenshots ─────────────────────────────────────────────
+
+export interface Screenshot {
+  id: string;
+  scan_id: string;
+  finding_id: string | null;
+  url: string;
+  http_status: number | null;
+  page_title: string | null;
+  file_path: string;
+  thumbnail_path: string | null;
+  file_size_bytes: number | null;
+  tech_detected: string[] | null;
+  rendered_with: string;
+  created_at: string;
 }
 
 // ─── Chat ────────────────────────────────────────────────────

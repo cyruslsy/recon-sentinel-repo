@@ -46,7 +46,7 @@ async def add_api_key(data: ApiKeyCreate, project_id: UUID | None = None, user: 
         created_by=user.id,
     )
     db.add(key)
-    await db.commit()
+    await db.flush()
     await db.refresh(key)
     return key
 
@@ -162,7 +162,7 @@ async def create_engine(data: ScanEngineCreate, user: User = Depends(get_current
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid engine config: {e}")
     db.add(engine)
-    await db.commit()
+    await db.flush()
     await db.refresh(engine)
     return engine
 
@@ -186,7 +186,7 @@ async def update_engine(engine_id: UUID, data: ScanEngineCreate, user: User = De
         raise HTTPException(status_code=403, detail="Access denied")
     for key, value in data.model_dump().items():
         setattr(engine, key, value)
-    await db.commit()
+    await db.flush()
     await db.refresh(engine)
     return engine
 

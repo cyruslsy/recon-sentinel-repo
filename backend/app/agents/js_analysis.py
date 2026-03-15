@@ -115,6 +115,21 @@ class JSAnalysisAgent(BaseAgent):
         self._tech_js_patterns = tech_ctx.get_js_patterns()
         logger.info(f"JS Analysis: {len(self._tech_js_patterns)} extra tech-aware patterns loaded")
 
+        # ─── C2: WAF-aware request delay ────────────────────────
+        crawl_delay = 0.0
+        import uuid as _uuid
+        async with AsyncSessionLocal() as db:
+            from sqlalchemy import select
+            waf_result = await db.execute(
+                select(Finding.raw_data)
+                .where(Finding.scan_id == _uuid.UUID(self.scan_id))
+                .where(Finding.finding_type == FindingType.WAF_DETECTION)
+            )
+            if any(r.raw_data.get("blocks_attacks") for (r,) in waf_result.all() if r and isinstance(r, dict)):
+                crawl_delay = 1.0
+                logger.info("C2: WAF detected — adding 1s delay between JS requests")
+        self._crawl_delay = crawl_delay
+
         # ─── Phase 1: Get live hosts from active phase ────────
         await self.report_progress(5, "Getting live web hosts...")
         hosts = await self._get_live_hosts()

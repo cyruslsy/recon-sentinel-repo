@@ -14,15 +14,15 @@ const TEMPLATES = [
 ];
 
 const SECTIONS = [
-  { id: "exec_summary", label: "Executive Summary", default: true },
-  { id: "methodology", label: "Methodology", default: true },
-  { id: "scope", label: "Scope & Targets", default: true },
-  { id: "findings", label: "Detailed Findings", default: true },
-  { id: "mitre", label: "MITRE ATT&CK Mapping", default: true },
-  { id: "credentials", label: "Credential Analysis", default: false },
-  { id: "attack_chain", label: "Attack Chain Analysis", default: false },
-  { id: "remediation", label: "Remediation Priorities", default: true },
-  { id: "appendix", label: "Technical Appendix", default: false },
+  { id: "exec_summary", label: "Executive Summary", default: true, disabled: false },
+  { id: "methodology", label: "Methodology", default: true, disabled: false },
+  { id: "scope", label: "Scope & Targets", default: true, disabled: false },
+  { id: "findings", label: "Detailed Findings", default: true, disabled: false },
+  { id: "mitre", label: "MITRE ATT&CK Mapping", default: true, disabled: false },
+  { id: "credentials", label: "Credential Analysis", default: false, disabled: true },
+  { id: "attack_chain", label: "Attack Chain Analysis", default: false, disabled: true },
+  { id: "remediation", label: "Remediation Priorities", default: true, disabled: false },
+  { id: "appendix", label: "Technical Appendix", default: false, disabled: true },
 ];
 
 export default function ReportsPage() {
@@ -95,6 +95,7 @@ export default function ReportsPage() {
     <AppLayout>
       <div className="max-w-5xl mx-auto">
         <h1 className="text-xl font-semibold mb-6">Reports</h1>
+        <p className="text-sentinel-muted text-sm mb-4">Generate and download pentest reports</p>
 
         {/* ─── Template Selector ─── */}
         <div className="bg-sentinel-surface border border-sentinel-border rounded-lg p-5 mb-6">
@@ -142,15 +143,19 @@ export default function ReportsPage() {
               {SECTIONS.map(s => (
                 <button
                   key={s.id}
-                  onClick={() => setSections(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
+                  onClick={() => !s.disabled && setSections(prev => ({ ...prev, [s.id]: !prev[s.id] }))}
+                  disabled={s.disabled}
+                  title={s.disabled ? "Coming soon" : undefined}
                   className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                    sections[s.id]
+                    s.disabled
+                      ? "border-sentinel-border/50 text-sentinel-muted/50 cursor-not-allowed"
+                      : sections[s.id]
                       ? "border-sentinel-accent/50 bg-sentinel-accent/10 text-sentinel-accent"
                       : "border-sentinel-border text-sentinel-muted hover:border-sentinel-accent/30"
                   }`}
-                  aria-pressed={sections[s.id]}
+                  aria-pressed={s.disabled ? undefined : sections[s.id]}
                 >
-                  {sections[s.id] ? "✓ " : ""}{s.label}
+                  {s.disabled ? "" : sections[s.id] ? "✓ " : ""}{s.label}
                 </button>
               ))}
             </div>

@@ -50,7 +50,7 @@ async def generate_report(data: ReportCreate, user: User = Depends(get_current_u
         generated_by=user.id,
     )
     db.add(report)
-    await db.commit()
+    await db.flush()
     await db.refresh(report)
 
     # Dispatch LLM-powered report generation

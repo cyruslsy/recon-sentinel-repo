@@ -49,7 +49,7 @@ async def create_channel(project_id: UUID, data: NotificationChannelCreate, user
         created_by=user.id,
     )
     db.add(channel)
-    await db.commit()
+    await db.flush()
     await db.refresh(channel)
     return channel
 
@@ -59,7 +59,7 @@ async def update_channel(channel_id: UUID, data: NotificationChannelUpdate, user
     channel = await authorize_notification_channel(channel_id, user, db)
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(channel, key, value)
-    await db.commit()
+    await db.flush()
     await db.refresh(channel)
     return channel
 

@@ -96,6 +96,8 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://sentinel:cRhT1wfYWOw8BB1UBpjmS/pvSfO3QvDWVy09yZJOWWg=@postgres:5432/recon_sentinel
       REDIS_URL: redis://:${REDIS_PASSWORD:-sentinel-redis-secret}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-sentinel-redis-secret}@redis:6379/1
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-sentinel-redis-secret}@redis:6379/2
       DB_PASSWORD_FILE: /run/secrets/db_password
       JWT_SECRET_FILE: /run/secrets/jwt_secret
       ANTHROPIC_API_KEY_FILE: /run/secrets/anthropic_api_key
@@ -136,7 +138,7 @@ services:
       celery -A app.core.celery_app worker
       --loglevel=warning
       --concurrency=4
-      --queues=default,subdomain,port_scan,web_recon,osint,threat_intel,cred_leak,email_sec,ssl_tls,waf,cloud,dir_file,vuln,historical,js_analysis
+      --queues=celery,default,subdomain,port_scan,web_recon,web_spider,osint,threat_intel,cred_leak,email_sec,ssl_tls,waf,cloud,dir_file,vuln,historical,js_analysis
       --hostname=worker-tools@%h
     environment:
       DATABASE_URL: postgresql+asyncpg://sentinel:cRhT1wfYWOw8BB1UBpjmS/pvSfO3QvDWVy09yZJOWWg=@postgres:5432/recon_sentinel

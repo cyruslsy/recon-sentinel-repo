@@ -73,6 +73,7 @@ export default function ScansPage() {
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-semibold">Scans</h1>
+        <p className="text-sentinel-muted text-sm mb-4">Launch, monitor, and manage reconnaissance scans</p>
           <button
             onClick={() => setShowLaunch(!showLaunch)}
             className="bg-sentinel-accent hover:bg-sentinel-accent/90 text-white text-sm font-medium px-4 py-2 rounded transition-colors"

@@ -51,6 +51,7 @@ class User(Base, TimestampMixin):
     )
     api_key_hash: Mapped[Optional[str]] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    setup_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     # Relationships
@@ -397,6 +398,7 @@ class Finding(Base, TimestampMixin):
         String(20)  # If set, overrides the scanner-assigned severity for reporting
     )
     severity_override_reason: Mapped[Optional[str]] = mapped_column(Text)
+    remediation: Mapped[Optional[str]] = mapped_column(Text)
 
     # Deduplication
     fingerprint: Mapped[Optional[str]] = mapped_column(String(255))

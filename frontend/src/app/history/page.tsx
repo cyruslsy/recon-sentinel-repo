@@ -107,6 +107,7 @@ function HistoryPageInner() {
     <AppLayout>
       <div className="max-w-6xl mx-auto">
         <h1 className="text-xl font-semibold mb-6">Scan History & Diff</h1>
+        <p className="text-sentinel-muted text-sm mb-4">Compare findings across scan iterations</p>
 
         {/* Scan selector */}
         <div className="flex gap-3 mb-6">

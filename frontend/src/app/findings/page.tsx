@@ -185,6 +185,26 @@ function FindingDetail({
             </div>
           )}
 
+          {/* Raw Data */}
+          {finding.raw_data && Object.keys(finding.raw_data).length > 0 && (
+            <details className="group">
+              <summary className="text-[10px] uppercase text-sentinel-muted tracking-wider mb-1 cursor-pointer select-none hover:text-sentinel-text">
+                Raw Data <span className="text-sentinel-accent group-open:rotate-90 inline-block transition-transform">&#9654;</span>
+              </summary>
+              <pre className="text-xs font-mono bg-sentinel-bg rounded p-3 border border-sentinel-border overflow-x-auto max-h-64 overflow-y-auto mt-1">
+                {JSON.stringify(finding.raw_data, null, 2)}
+              </pre>
+            </details>
+          )}
+
+          {/* Remediation */}
+          {finding.remediation && (
+            <div>
+              <p className="text-[10px] uppercase text-sentinel-muted tracking-wider mb-1">Remediation</p>
+              <p className="text-sm text-sentinel-text/90 whitespace-pre-wrap bg-sentinel-green/5 border border-sentinel-green/20 rounded p-3">{finding.remediation}</p>
+            </div>
+          )}
+
           {/* Verification & Triage */}
           <div className="border-t border-sentinel-border pt-4">
             <p className="text-[10px] uppercase text-sentinel-muted tracking-wider mb-3">Triage</p>
@@ -367,7 +387,10 @@ function FindingsPageInner() {
     <AppLayout>
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-semibold">Findings</h1>
+          <div>
+            <h1 className="text-xl font-semibold">Findings</h1>
+            <p className="text-sentinel-muted text-sm">Browse, triage, and export discovered findings</p>
+          </div>
           {/* Export */}
           {findings.length > 0 && (
             <div className="flex gap-2">

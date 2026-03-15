@@ -25,7 +25,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      router.push("/dashboard");
+      router.push("/setup");
     } catch (err: unknown) {
       setError((err as { detail?: string })?.detail || "Login failed");
     } finally {
@@ -39,7 +39,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await register(email, password, displayName);
-      router.push("/dashboard");
+      router.push("/setup");
     } catch (err: unknown) {
       setError((err as { detail?: string })?.detail || "Setup failed");
     } finally {

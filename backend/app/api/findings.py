@@ -98,7 +98,7 @@ async def update_finding(finding_id: UUID, data: FindingUpdate, user: User = Dep
     for key, value in update_data.items():
         setattr(finding, key, value)
     
-    await db.commit()
+    await db.flush()
     await db.refresh(finding)
     return finding
 

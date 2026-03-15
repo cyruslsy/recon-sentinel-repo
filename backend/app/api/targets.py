@@ -32,7 +32,7 @@ async def create_target(project_id: UUID, data: TargetCreate, user: User = Depen
     await authorize_project(project_id, user, db)
     target = Target(**data.model_dump(), project_id=project_id, created_by=user.id)
     db.add(target)
-    await db.commit()
+    await db.flush()
     await db.refresh(target)
     return target
 

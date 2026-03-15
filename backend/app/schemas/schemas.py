@@ -46,6 +46,7 @@ class UserResponse(SentinelBase):
     display_name: str
     role: UserRole
     is_active: bool
+    setup_completed: bool = False
     last_login_at: Optional[datetime] = None
     created_at: datetime
 
@@ -309,6 +310,8 @@ class FindingResponse(SentinelBase):
     verification_status: Optional[str] = "unverified"
     severity_override: Optional[str] = None
     severity_override_reason: Optional[str] = None
+    raw_data: Optional[dict] = None
+    remediation: Optional[str] = None
     created_at: datetime
 
 class FindingBrief(SentinelBase):
@@ -438,6 +441,25 @@ class ReportResponse(SentinelBase):
     file_path: str
     file_size_bytes: Optional[int] = None
     generated_at: datetime
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SCREENSHOTS
+# ═══════════════════════════════════════════════════════════════════════
+
+class ScreenshotResponse(SentinelBase):
+    id: uuid.UUID
+    scan_id: uuid.UUID
+    finding_id: Optional[uuid.UUID] = None
+    url: str
+    http_status: Optional[int] = None
+    page_title: Optional[str] = None
+    file_path: str
+    thumbnail_path: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    tech_detected: Optional[list[str]] = None
+    rendered_with: str = "gowitness"
+    created_at: datetime
 
 
 # ═══════════════════════════════════════════════════════════════════════

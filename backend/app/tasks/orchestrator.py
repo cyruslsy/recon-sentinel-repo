@@ -16,7 +16,7 @@ from decimal import Decimal
 from app.core.celery_app import celery_app
 from app.core.tz import utc_now
 from app.core.database import AsyncSessionLocal
-from app.core.llm import llm_call, parse_llm_json, LLMUnavailableError
+from app.core.llm import llm_call, parse_llm_json, LLMUnavailableError, BudgetExceededError
 from app.core.redis import publish_scan_event
 from app.models.models import Scan, ApprovalGate
 from app.models.enums import ScanPhase, ScanStatus, ApprovalDecision
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Allowlist of valid agent types for re-plan decisions (Amendment #25)
 ALLOWED_AGENT_TYPES = frozenset({
     "subdomain", "osint", "email_sec", "threat_intel", "cred_leak",
-    "port_scan", "web_recon", "ssl_tls", "dir_file", "cloud",
+    "port_scan", "web_recon", "web_spider", "ssl_tls", "dir_file", "cloud",
     "js_analysis", "vuln", "subdomain_takeover", "badsecrets",
     "wayback", "waf", "github_dork",
 })
@@ -150,9 +150,14 @@ class ScanOrchestrator:
                     self.state.current_phase = "active"
                     logger.info("bounty profile — gate 1 auto-approved")
                 else:
-                    await self._generate_gate(1)
-                    await self._save_checkpoint()
-                    return self.state  # PAUSE for human
+                    auto_approved = await self._generate_gate(1)
+                    if auto_approved:
+                        self.state.gate_1_decision = "approved"
+                        self.state.current_phase = "active"
+                        logger.info("Gate 1 auto-approved (LLM unavailable)")
+                    else:
+                        await self._save_checkpoint()
+                        return self.state  # PAUSE for human
 
             elif current == "active":
                 await self._run_active()
@@ -169,9 +174,14 @@ class ScanOrchestrator:
                     self.state.current_phase = "replan"
                     logger.info("bounty profile — gate 2 auto-approved")
                 else:
-                    await self._generate_gate(2)
-                    await self._save_checkpoint()
-                    return self.state  # PAUSE for human
+                    auto_approved = await self._generate_gate(2)
+                    if auto_approved:
+                        self.state.gate_2_decision = "approved"
+                        self.state.current_phase = "replan"
+                        logger.info("Gate 2 auto-approved (LLM unavailable)")
+                    else:
+                        await self._save_checkpoint()
+                        return self.state  # PAUSE for human
 
             elif current == "replan":
                 await self._run_replan()
@@ -267,6 +277,7 @@ class ScanOrchestrator:
         per_target_agents = [
             "app.agents.port_scan.run_port_scan_agent",
             "app.agents.web_recon.run_web_recon_agent",
+            "app.agents.web_spider.run_web_spider_agent",
             "app.agents.ssl_tls.run_ssl_tls_agent",
             "app.agents.dir_file.run_dir_file_agent",
             "app.agents.js_analysis.run_js_analysis_agent",
@@ -308,15 +319,21 @@ class ScanOrchestrator:
         # Dispatch per-target agents across all targets
         all_results = []
 
+        # C2: Run WAF agent FIRST so downstream agents can adapt rate limits
+        waf_agents = [a for a in domain_level_agents if "waf" in a]
+        non_waf_domain = [a for a in domain_level_agents if "waf" not in a]
+        if waf_agents:
+            logger.info("C2: Running WAF detection first for proactive rate adjustment")
+            all_results.extend(await self._dispatch_agents(waf_agents))
+
         # Fan-out: each target gets its own set of agent tasks
         all_results.extend(
             await self._dispatch_agents_fanout(per_target_agents, targets)
         )
 
-        # Domain-level agents run once against root domain
-        all_results.extend(
-            await self._dispatch_agents(domain_level_agents)
-        )
+        # Remaining domain-level agents (cloud, etc.)
+        if non_waf_domain:
+            all_results.extend(await self._dispatch_agents(non_waf_domain))
 
         self.state.active_results = self._summarize_results(all_results)
         await self._refresh_findings_summary()
@@ -371,7 +388,8 @@ class ScanOrchestrator:
 
     # ─── Gate Generation ──────────────────────────────────────
 
-    async def _generate_gate(self, gate_number: int) -> None:
+    async def _generate_gate(self, gate_number: int) -> bool:
+        """Generate an approval gate. Returns True if auto-approved (LLM unavailable)."""
         phase_name = "passive" if gate_number == 1 else "active"
         await self._update_scan(
             ScanPhase.GATE_1 if gate_number == 1 else ScanPhase.GATE_2,
@@ -397,6 +415,7 @@ class ScanOrchestrator:
             f"\"recommendation\": \"...\", \"suggested_scope\": []}}"
         )
 
+        auto_approve = False
         try:
             result = await llm_call(
                 messages=[{"role": "user", "content": prompt}],
@@ -407,6 +426,15 @@ class ScanOrchestrator:
             )
             self.state.total_llm_cost_usd += float(result["cost_usd"])
             recommendation = parse_llm_json(result["content"])
+        except (LLMUnavailableError, BudgetExceededError):
+            logger.warning(f"Gate {gate_number}: LLM unavailable (budget/quota) — auto-approving with warning")
+            recommendation = {
+                "summary": f"{self.state.total_findings} findings from {phase_name} phase. AI analysis unavailable (budget/quota exceeded).",
+                "risk_assessment": "Auto-approved due to LLM unavailability. Manual review recommended.",
+                "recommendation": "Proceeding automatically with default scope.",
+                "suggested_scope": [],
+            }
+            auto_approve = True
         except Exception as e:
             logger.error(f"Gate {gate_number} analysis failed: {e}")
             recommendation = {
@@ -415,6 +443,7 @@ class ScanOrchestrator:
                 "recommendation": "Proceed with default scope.",
                 "suggested_scope": [],
             }
+            auto_approve = False
 
         async with AsyncSessionLocal() as db:
             gate = ApprovalGate(
@@ -422,7 +451,7 @@ class ScanOrchestrator:
                 gate_number=gate_number,
                 ai_summary=recommendation.get("summary", ""),
                 ai_recommendation=recommendation,
-                decision=ApprovalDecision.PENDING,
+                decision=ApprovalDecision.APPROVED if auto_approve else ApprovalDecision.PENDING,
             )
             db.add(gate)
             await db.commit()
@@ -442,6 +471,8 @@ class ScanOrchestrator:
             )
         except Exception:
             pass
+
+        return auto_approve
 
     # ─── Re-Plan (Amendments #6, #16, #24) ────────────────────
 
@@ -495,7 +526,7 @@ class ScanOrchestrator:
                 **decision, "cost_usd": cost, "timestamp": utc_now().isoformat(),
             })
 
-        except LLMUnavailableError:
+        except (LLMUnavailableError, BudgetExceededError):
             logger.warning("Re-plan LLM unavailable — proceeding with current plan")
         except Exception as e:
             logger.error(f"Re-plan failed: {e}")
@@ -762,6 +793,12 @@ def start_scan(scan_id: str, target_value: str, project_id: str, profile: str = 
     _signal.signal(_signal.SIGTERM, _handle_sigterm)
 
     try:
+        # Dispose the module-level engine to avoid cross-loop contamination.
+        # asyncio.run() creates a new event loop; the engine's connection pool
+        # was created on the import-time loop and can't be reused.
+        from app.core.database import engine
+        asyncio.run(engine.dispose())
+
         final = asyncio.run(orchestrator.run_from_phase("passive"))
         return {"status": final.current_phase, "findings": final.total_findings}
     finally:
@@ -779,6 +816,8 @@ def handle_gate_decision(scan_id: str, gate_number: int, decision: str, modifica
             state = ReconState.from_json(scan.langgraph_checkpoint)
         orchestrator = ScanOrchestrator(state)
         return await orchestrator.handle_gate_decision(gate_number, decision, modifications)
+    from app.core.database import engine
+    asyncio.run(engine.dispose())
     final = asyncio.run(_resume())
     return {"status": final.current_phase, "findings": final.total_findings}
 

@@ -42,7 +42,7 @@ async def list_organizations(user: User = Depends(get_current_user), db: AsyncSe
 async def create_organization(data: OrganizationCreate, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     org = Organization(**data.model_dump(), created_by=user.id)
     db.add(org)
-    await db.commit()
+    await db.flush()
     await db.refresh(org)
     return org
 

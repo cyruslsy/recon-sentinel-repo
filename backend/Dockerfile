@@ -28,11 +28,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpcap-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# ProjectDiscovery tools
+# ProjectDiscovery tools + Phase B additions (puredns, katana, gau)
 RUN go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest && \
     go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@latest && \
     go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest && \
     go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest && \
+    go install -v github.com/projectdiscovery/katana/cmd/katana@latest && \
+    go install -v github.com/d3mondev/puredns/v2@latest && \
+    go install -v github.com/lc/gau/v2/cmd/gau@latest && \
     go install -v github.com/ffuf/ffuf/v2@latest && \
     go install -v github.com/sensepost/gowitness@latest
 
@@ -58,6 +61,21 @@ RUN pip install --no-cache-dir theHarvester
 RUN git clone --depth 1 https://github.com/danielmiessler/SecLists.git /usr/share/seclists && \
     rm -rf /usr/share/seclists/.git
 
+# Compile massdns from source (Phase B1)
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential && \
+    git clone --depth 1 https://github.com/blechschmidt/massdns.git /tmp/massdns && \
+    cd /tmp/massdns && make && cp bin/massdns /usr/local/bin/ && \
+    rm -rf /tmp/massdns && \
+    apt-get purge -y build-essential && apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
+# Download wordlists for subdomain brute-force (Phase B1)
+RUN mkdir -p /usr/share/wordlists && \
+    curl -sL https://raw.githubusercontent.com/n0kovo/n0kovo_subdomains/main/n0kovo_subdomains_huge.txt \
+      -o /usr/share/wordlists/n0kovo_subdomains_huge.txt && \
+    curl -sL https://raw.githubusercontent.com/trickest/resolvers/main/resolvers.txt \
+      -o /usr/share/wordlists/resolvers.txt
+
 # Copy Python packages from py-builder
 COPY --from=py-builder /install /usr/local
 
@@ -71,6 +89,9 @@ COPY --from=go-builder /go/bin/httpx /usr/local/bin/
 COPY --from=go-builder /go/bin/nuclei /usr/local/bin/
 COPY --from=go-builder /go/bin/ffuf /usr/local/bin/
 COPY --from=go-builder /go/bin/gowitness /usr/local/bin/
+COPY --from=go-builder /go/bin/puredns /usr/local/bin/
+COPY --from=go-builder /go/bin/katana /usr/local/bin/
+COPY --from=go-builder /go/bin/gau /usr/local/bin/
 
 # Download Nuclei templates
 RUN nuclei -update-templates 2>/dev/null || true

@@ -27,6 +27,7 @@ function CredentialsPageInner() {
     <AppLayout>
       <div className="max-w-6xl mx-auto">
         <h1 className="text-xl font-semibold mb-6">Credential Leaks</h1>
+        <p className="text-sentinel-muted text-sm mb-4">Leaked credentials and breach correlation analysis</p>
 
         {!scanId ? (
           <div className="flex flex-col items-center justify-center py-16 gap-4">

@@ -29,13 +29,35 @@ class PortScanAgent(BaseAgent):
         self._use_connect_scan = False  # Self-correction flag
         self._skip_host_discovery = False
 
+    # C3: Non-standard ports for common services detected via tech context
+    TECH_PORTS = {
+        "mongodb": [27017, 27018, 27019],
+        "redis": [6379],
+        "elasticsearch": [9200, 9300],
+        "docker": [2375, 2376],
+        "kubernetes": [6443, 10250],
+        "postgresql": [5432],
+        "mysql": [3306],
+        "mssql": [1433],
+        "cassandra": [9042],
+        "memcached": [11211],
+        "rabbitmq": [5672, 15672],
+        "kafka": [9092],
+        "jenkins": [8080, 50000],
+        "grafana": [3000],
+        "prometheus": [9090],
+    }
+
     async def execute(self) -> list[dict]:
         """Run Naabu for port discovery, then Nmap for service detection."""
         target = self.target_value
 
+        # ─── C3: Get tech-specific extra ports ──────────────────
+        extra_ports = await self._get_tech_ports()
+
         # ─── Phase 1: Fast Port Discovery (Naabu) ────────────
         await self.report_progress(10, "Running Naabu...")
-        open_ports = await self._run_naabu(target)
+        open_ports = await self._run_naabu(target, extra_ports=extra_ports)
 
         if not open_ports:
             logger.info(f"Naabu found 0 open ports on {target}")
@@ -50,7 +72,25 @@ class PortScanAgent(BaseAgent):
 
     # ─── Naabu ────────────────────────────────────────────────
 
-    async def _run_naabu(self, target: str) -> list[int]:
+    async def _get_tech_ports(self) -> list[int]:
+        """C3: Get extra ports based on technologies detected in earlier phases."""
+        try:
+            from app.agents.tech_context import get_scan_tech_context
+            tech_ctx = await get_scan_tech_context(self.scan_id)
+            extra = set()
+            for tech in tech_ctx.detected_techs:
+                tech_lower = tech.lower()
+                for key, ports in self.TECH_PORTS.items():
+                    if key in tech_lower:
+                        extra.update(ports)
+            if extra:
+                logger.info(f"C3: Adding {len(extra)} tech-specific ports: {sorted(extra)}")
+            return sorted(extra)
+        except Exception as e:
+            logger.warning(f"C3: Tech port detection failed: {e}")
+            return []
+
+    async def _run_naabu(self, target: str, extra_ports: list[int] | None = None) -> list[int]:
         """Fast SYN port discovery with Naabu."""
         rate_limit = self.config.get("rate_limit", 1000)
         top_ports = self.config.get("top_ports", "1000")
@@ -63,6 +103,10 @@ class PortScanAgent(BaseAgent):
             "-silent",
             "-json",
         ]
+
+        # C3: Add tech-specific ports to scan
+        if extra_ports:
+            cmd.extend(["-p", ",".join(str(p) for p in extra_ports)])
 
         try:
             result = await self.run_command(cmd, timeout=180, parse_json=True)
