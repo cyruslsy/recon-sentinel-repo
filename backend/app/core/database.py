@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import MetaData, text
+from sqlalchemy import DateTime, MetaData, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -35,7 +35,7 @@ class Base(DeclarativeBase):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     def to_dict(self) -> dict[str, Any]:
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
@@ -44,7 +44,7 @@ class Base(DeclarativeBase):
 class TimestampMixin:
     """Mixin for models that need updated_at tracking."""
     updated_at: Mapped[datetime] = mapped_column(
-        default=utc_now, onupdate=utc_now
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
 
 
@@ -83,10 +83,10 @@ async def get_db(request: Request = None) -> AsyncSession:
             try:
                 # Set RLS context if user is authenticated
                 if request and hasattr(request, "state") and hasattr(request.state, "rls_user_id"):
-                    await session.execute(
-                        text("SET LOCAL app.current_user_id = :uid"),
-                        {"uid": request.state.rls_user_id},
-                    )
+                    uid = str(request.state.rls_user_id)
+                    # SET LOCAL doesn't support parameterized queries in PostgreSQL.
+                    # UUID format is validated before reaching here (JWT decode).
+                    await session.execute(text(f"SET LOCAL app.current_user_id = '{uid}'"))
                 yield session
             except Exception:
                 await session.rollback()
@@ -98,10 +98,8 @@ async def get_db_with_rls(user_id: str) -> AsyncSession:
     async with AsyncSessionLocal() as session:
         async with session.begin():
             try:
-                await session.execute(
-                    text("SET LOCAL app.current_user_id = :uid"),
-                    {"uid": user_id},
-                )
+                uid = str(user_id)
+                await session.execute(text(f"SET LOCAL app.current_user_id = '{uid}'"))
                 yield session
             except Exception:
                 await session.rollback()

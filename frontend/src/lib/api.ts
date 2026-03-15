@@ -54,7 +54,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       const retry = await fetch(`${API_BASE}${path}`, { ...options, headers, credentials: "include" });
       if (retry.ok) return retry.status === 204 ? (undefined as T) : retry.json();
     }
-    window.location.href = "/login";
+    if (typeof window !== "undefined" && window.location.pathname !== "/login" && window.location.pathname !== "/register") {
+      window.location.href = "/login";
+    }
     throw new ApiError(401, "Session expired");
   }
 
@@ -91,6 +93,9 @@ async function refreshToken(): Promise<boolean> {
 
 export const api = {
   // Auth
+  setupStatus: () =>
+    fetch(`${API_BASE}/auth/setup-status`).then((r) => r.json()) as Promise<{ needs_setup: boolean }>,
+
   login: (email: string, password: string) =>
     request<TokenResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
 
@@ -182,7 +187,7 @@ export const api = {
   // Reports
   listReports: () => request<Report[]>("/reports"),
 
-  generateReport: (data: { scan_id: string; template: string; format: string }) =>
+  generateReport: (data: { scan_id: string; template: string; format: string; sections?: string[] }) =>
     request<Report>("/reports", { method: "POST", body: JSON.stringify(data) }),
 
   // Chat

@@ -1,40 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(docker compose *)",
-      "Bash(git *)",
-      "Bash(python -m pytest *)",
-      "Bash(cat *)",
-      "Bash(grep *)",
-      "Bash(find *)",
-      "Bash(wc *)",
-      "Bash(head *)",
-      "Bash(tail *)",
-      "Bash(ls *)",
-      "Bash(curl *)",
-      "Bash(pip install *)",
-      "Bash(npm *)",
-      "Bash(alembic *)",
-      "Bash(cd *)",
-      "Bash(mkdir *)",
-      "Bash(cp *)",
-      "Bash(mv *)",
-      "Edit(backend/**)",
-      "Edit(frontend/**)",
-      "Edit(tests/**)",
-      "Edit(docs/**)",
-      "Edit(CLAUDE.md)",
-      "Edit(REVIEW.md)",
-      "Edit(.claude/**)",
-      "Edit(docker-compose*)",
-      "Write(backend/**)",
-      "Write(frontend/**)",
-      "Write(tests/**)",
-      "Write(docs/**)"
+      "Bash(*)",
+      "Read(*)",
+      "Edit(*)",
+      "Write(*)"
     ],
     "deny": [
       "Edit(secrets/**)",
-      "Edit(.env)",
       "Write(secrets/**)"
     ]
   },

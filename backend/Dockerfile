@@ -78,6 +78,8 @@ RUN nuclei -update-templates 2>/dev/null || true
 WORKDIR /app
 COPY . .
 
+ENV PYTHONPATH=/app
+
 # Create non-root user
 RUN groupadd -g 1000 sentinel && \
     useradd -u 1000 -g sentinel -s /bin/sh sentinel && \

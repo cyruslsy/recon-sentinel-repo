@@ -197,6 +197,7 @@ export interface Report {
   format: string;
   company_name: string | null;
   report_title: string | null;
+  file_path: string;
   file_size_bytes: number | null;
   generated_at: string;
 }
