@@ -5,12 +5,12 @@ Author: Cyrus Li · Repo: github.com/cyruslsy/recon-sentinel-repo
 
 ## Stack
 
-FastAPI · Next.js 14 · PostgreSQL 16 · Redis 7 · Celery · LiteLLM · Docker Compose (7 prod services)
+FastAPI · Next.js 14 · PostgreSQL 16 · Redis 7 · Celery · LiteLLM · Docker Compose (8 prod services)
 
 ## Architecture
 
 LangGraph orchestrator with 7 phases: passive → gate_1 → active → gate_2 → replan → vuln → report.
-17 scanning agents, 3 phases, per-subdomain fan-out. 11 self-correction patterns.
+18 scanning agents (17 original + web_spider), 3 phases, per-subdomain fan-out. 11 self-correction patterns.
 13 authorize_* helpers (every endpoint). RLS on 5 tables. JWT auth (admin/tester/auditor).
 
 Scan profiles: full (2 gates), passive_only, quick (1 gate), stealth, bounty (auto-approve).
@@ -42,17 +42,24 @@ LLM_PRESET=free docker compose -f docker-compose.prod.yml restart api worker
 
 ## Key Files
 
-- `docs/MASTER-PLAN.md` — Implementation plan (37 items, 7 phases). Read before any feature work.
+- `docs/MASTER-PLAN.md` — Implementation plan (55 items, Phase 0 + A-I). Read before any feature work.
+- `docs/design/data-flow.md` — What each agent produces and who consumes it.
+- `docs/design/three-layer-contract.md` — Every field across DB → Schema → Types → Frontend.
+- `docs/design/ux-wireframes.md` — 16 pages with purpose, data source, states, design tokens.
+- `docs/design/review-checklist.md` — 30 questions. Run before starting any phase.
 - `docs/TECHNICAL-DEBT.md` — Known issues and stats.
 - `CHANGELOG.md` — What changed recently.
-- `.claude/rules/` — Coding rules by domain (backend, frontend, agents, database, docker).
+
+## Current Progress
+
+Phases A-C complete. Immediate fixes mostly done. Currently testing with bounty scan.
+Next: Phase D (Finding Quality) → Phase E (Intelligence Layer — THE DIFFERENTIATOR).
 
 ## Known Broken Pipes
 
-These exist in the DB but are NOT exposed via API:
-1. `Finding.raw_data` (JSONB with curl commands, Shodan data) — missing from FindingResponse schema
-2. `Screenshot` table (11 columns) — no API endpoint, no frontend display
-3. `Report` branding fields (company_name, logo) — backend ignores during PDF generation
+1. `Report` branding fields: primary_color, logo_path, included_sections, ai_executive_summary — in DB, NOT in ReportResponse schema (F6)
+2. `Screenshot` table — API endpoint exists now but frontend doesn't display images yet
+3. Report section toggles — all set to disabled: false (F4 incomplete)
 
 ## Compact Instructions
 
