@@ -281,4 +281,189 @@ Three audiences: CISO (page 2-3), Red Team (page 4), Blue Team (pages 5-6).
 | **E: Intelligence** | **6** | **8d** | **Attack scenarios, posture score — THE DIFFERENTIATOR** |
 | F: Report + Frontend | 3 | 5d | Report for 3 audiences, /scenarios page |
 | G: Optimization | 8 | 10d* | Progressive depth, testssl, Dalfox |
-| **TOTAL** | **41** | **~40d** | **Core A-F: ~30 days** |
+| H: Production Hardening | 8 | 6d | DevOps, backups, CI/CD, monitoring |
+| I: Frontend Completeness | 6 | 8d | Settings, user mgmt, dashboard redesign |
+| **TOTAL** | **55** | **~54d** | **Core A-F: ~30d · Full A-I: ~54d** |
+
+---
+
+## Phase H: Production Hardening (~6 days)
+
+> **Operational necessities for running on a real server with real clients.**
+> Do this after Phase F, before taking on paid engagements.
+
+| # | Item | Days | Depends | Files Changed |
+|---|------|------|---------|---------------|
+| H1 | TLS with Let's Encrypt | 0.5d | None | nginx.prod.conf, docker-compose.prod.yml, certbot setup |
+| H2 | Automated PostgreSQL backup | 0.5d | None | backup script, cron, docker-compose.prod.yml |
+| H3 | Per-agent timeout configuration | 0.5d | None | base.py, orchestrator.py |
+| H4 | Concurrent scan limiter | 0.5d | None | orchestrator.py, scans.py API |
+| H5 | Log rotation + monitoring | 1d | None | docker-compose.prod.yml, alerting script |
+| H6 | CI/CD pipeline (GitHub Actions) | 1.5d | None | .github/workflows/ci.yml |
+| H7 | Tool version pinning | 0.5d | None | Dockerfile, requirements.txt |
+| H8 | Redis failure graceful handling | 1d | None | redis.py, auth.py, orchestrator.py |
+
+### H1: TLS with Let's Encrypt
+```bash
+# Add certbot container to docker-compose.prod.yml
+# Nginx conf: listen 443 ssl, redirect 80→443
+# Auto-renewal via certbot renew cron
+# Requires: a real domain pointed to the server IP
+```
+
+### H2: PostgreSQL Backup
+```bash
+# Daily backup script using pg_dump
+# Retention: 7 daily + 4 weekly + 3 monthly
+# Store in /opt/backups/ with optional S3 sync
+# Add as cron job or docker-compose service with sleep loop
+```
+
+### H3: Per-Agent Timeout
+In `base.py`, make timeout configurable per agent:
+```python
+class BaseAgent:
+    default_timeout = 300  # 5 min
+    
+    # Override per agent:
+    # PortScanAgent.default_timeout = 600 (10 min, slow nmap)
+    # DirFileAgent.default_timeout = 900 (15 min, large wordlists)
+    # SSLTLSAgent.default_timeout = 120 (2 min, fast check)
+```
+Orchestrator uses `agent.default_timeout` when dispatching Celery tasks.
+
+### H4: Concurrent Scan Limiter
+In `scans.py` launch endpoint:
+```python
+# Count active scans (status IN ('pending', 'running', 'paused'))
+# If >= MAX_CONCURRENT_SCANS (default: 3), reject with 429
+# Config via env var: MAX_CONCURRENT_SCANS=3
+```
+
+### H5: Log Rotation + Monitoring
+- Docker log rotation: add `logging.options.max-size: "50m"` and `max-file: "5"` to each service
+- Health check script that runs every 5 min via cron:
+  - Checks all container health
+  - Checks disk usage > 90%
+  - Checks memory usage > 90%
+  - Sends alert via webhook (Slack/Discord) on failure
+- Optional: Prometheus + Grafana stack for metrics dashboard
+
+### H6: CI/CD Pipeline
+```yaml
+# .github/workflows/ci.yml
+# On push to main:
+#   1. Run pytest (backend)
+#   2. Run tsc --noEmit (frontend type check)
+#   3. Build Docker images
+#   4. Run three-layer consistency check (custom script)
+# On PR:
+#   1. All above + Claude Code Review (if enabled)
+```
+
+### H7: Tool Version Pinning
+Pin Go tools in Dockerfile to specific tags, not `@latest`:
+```dockerfile
+RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.6.7 && \
+    go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.3.7 && \
+    go install github.com/projectdiscovery/httpx/cmd/httpx@v1.6.10
+```
+Pin Python packages in `requirements.txt` to exact versions.
+Document update procedure in `docs/DEVELOPMENT.md`.
+
+### H8: Redis Failure Handling
+Currently silent failures on:
+- Token revocation (`blacklist_all_user_tokens`) — add DB fallback: write revoked JTI to `revoked_tokens` table
+- WebSocket pub/sub (`publish_scan_event`) — add polling fallback: client polls `/api/v1/scans/{id}/status` every 5s if WebSocket disconnects
+- LLM budget check — already handled (allows call on Redis failure)
+
+---
+
+## Phase I: Frontend Completeness (~8 days)
+
+> **UI gaps discovered in reviews. Makes the platform feel production-ready.**
+> Do after Phase F (which builds /scenarios and report redesign).
+
+| # | Item | Days | Depends | DB | Schema | Types.ts | Frontend |
+|---|------|------|---------|-----|--------|----------|----------|
+| I1 | Dashboard redesign | 2d | E5 | None | None | None | dashboard/page.tsx |
+| I2 | Settings page | 2d | None | Settings model? | SettingsResponse | Settings | new page |
+| I3 | User management page (admin) | 1.5d | None | None (User exists) | UserListResponse | User[] | new page |
+| I4 | Findings-by-agent view | 0.5d | None | None | None | None | scans detail page |
+| I5 | Scan progress + ETA on dashboard | 1d | F3 | None | ScanProgressResponse | ScanProgress | scan card + dashboard |
+| I6 | Adaptive port scan depth per profile | 1d | C3 | None | None | None | None (backend only) |
+
+### I1: Dashboard Redesign
+Current dashboard shows summary stats. Redesign to show:
+- **Security posture score** (from E5) with trend arrow
+- **Recent critical/high findings** (last 5 scans, clickable)
+- **Active scan status** (progress bars, agent names, ETA)
+- **Scan queue** (pending scans with position)
+- **Quick actions**: "New Scan", "View Reports", "Review Gates"
+
+### I2: Settings Page
+Tabs: General | Scanning | Notifications | LLM | API Keys
+- **General**: Organization name, timezone, data retention days
+- **Scanning**: Default profile, max concurrent scans, default wordlists
+- **Notifications**: Slack webhook, Discord webhook, Telegram bot token, email
+- **LLM**: Current preset, monthly budget, current spend, model overrides
+- **API Keys**: View/regenerate API key, Shodan key, VirusTotal key, GitHub token
+
+Three-layer: may need a `Settings` model or use existing `Organization` fields. Evaluate whether to store in DB or `.env` file.
+
+### I3: User Management Page (Admin Only)
+- List all users with role, status, last login, created date
+- Invite new user (generates invite link)
+- Change role (admin/tester/auditor)
+- Deactivate/reactivate user
+- Only visible to admin role
+
+### I4: Findings-by-Agent View
+On scan detail page, add a tab or toggle:
+- Current: findings grouped by severity
+- New: findings grouped by agent (subdomain: 45, port_scan: 23, dir_file: 112, etc.)
+- Shows which agents produced the most/least value
+
+### I5: Scan Progress + ETA
+- During active phase: show progress bar per agent (from `agent_runs.progress_pct`)
+- Overall scan progress: weighted by phase (passive=20%, active=50%, vuln=30%)
+- ETA: based on average duration of previous scans with similar target size
+- Dashboard widget: "3 scans running, 1 queued"
+
+### I6: Adaptive Port Scan Depth
+Extend C3 to make port range profile-dependent:
+```python
+PORT_RANGES = {
+    "quick": "--top-ports 100",
+    "passive_only": None,  # no port scan
+    "stealth": "--top-ports 100",
+    "full": "--top-ports 1000",  # + tech ports from C3
+    "bounty": "-p -",  # full 65535
+}
+```
+
+---
+
+## Scanning Intelligence Gaps (Add to Existing Phases)
+
+These items should be incorporated into their respective phases rather than tracked separately:
+
+### Add to E6 (Threat Intel Utilization) — Currently Too Vague
+Specify exactly how downstream agents consume Shodan data:
+```
+1. port_scan.py: Read threat_intel findings for target IP.
+   If Shodan shows open ports not in naabu results → flag as "Shodan-only port" finding.
+   If Shodan shows service version → pass to vuln agent for version-specific checks.
+
+2. vuln.py: Read threat_intel findings for version strings.
+   Match Shodan versions against Nuclei template tags.
+   Prioritize templates matching detected versions.
+
+3. web_recon.py: Read Shodan HTTP headers/titles.
+   Compare with live httpx results → detect changes since Shodan last crawled.
+```
+
+### Add to A1 (DB Write Retry) — Redis Failure
+Extend A1 scope to also cover Redis write failures:
+- Token revocation: DB fallback table `revoked_tokens`
+- WebSocket: client-side polling fallback on disconnect
